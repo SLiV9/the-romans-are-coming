@@ -83,37 +83,6 @@ impl Map
 				draw_on_quadmap(&mut self.hit_quadmap, x, y, quad_value);
 			}
 		}
-		let noise = PerlinNoise2D::new(
-			NOISE_OCTAVES,
-			NOISE_AMPLITUDE,
-			8.0,
-			NOISE_PERSISTENCE,
-			NOISE_LACUNARITY,
-			NOISE_SCALE,
-			0.0,
-			noise_seed,
-		);
-		for y in 0..MAP_SIZE
-		{
-			for x in 0..MAP_SIZE
-			{
-				let v = noise.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				let period = (2 * GRID_CELL_SIZE) as f64;
-				let t = (y as f64) / period + 0.25;
-				let amplitude = 1.25 * (NOISE_AMPLITUDE as f64);
-				let triangle =
-					amplitude * (4.0 * (t - (t + 0.5).floor()).abs() - 1.0);
-				let w = v + triangle;
-				if w > 0.0
-				{
-					draw_on_bitmap(&mut self.region_bitmap, x, y);
-				}
-				else
-				{
-					erase_on_bitmap(&mut self.region_bitmap, x, y);
-				}
-			}
-		}
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
@@ -143,51 +112,42 @@ impl Map
 
 	pub fn draw(&self)
 	{
-		//unsafe { *DRAW_COLORS = 0x2341 };
+		unsafe { *DRAW_COLORS = 0x2341 };
+		blit(
+			&self.hit_quadmap,
+			0,
+			0,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_2BPP,
+		);
+		//unsafe { *DRAW_COLORS = 0x04 };
 		//blit(
-		//	&self.hit_quadmap,
+		//	&self.bitmap,
 		//	0,
 		//	0,
 		//	MAP_SIZE as u32,
 		//	MAP_SIZE as u32,
-		//	BLIT_2BPP,
+		//	BLIT_1BPP,
 		//);
-		unsafe { *DRAW_COLORS = 0x04 };
-		blit(
-			&self.bitmap,
-			0,
-			0,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_1BPP,
-		);
-		unsafe { *DRAW_COLORS = 0x20 };
-		blit(
-			&self.region_bitmap,
-			0,
-			0,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_1BPP,
-		);
-		unsafe { *DRAW_COLORS = 0x30 };
-		blit(
-			&self.region_bitmap,
-			0,
-			0,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_1BPP | BLIT_ROTATE,
-		);
-		unsafe { *DRAW_COLORS = 0x30 };
-		blit(
-			&self.centroid_bitmap,
-			0,
-			0,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_1BPP,
-		);
+		//unsafe { *DRAW_COLORS = 0x20 };
+		//blit(
+		//	&self.region_bitmap,
+		//	0,
+		//	0,
+		//	MAP_SIZE as u32,
+		//	MAP_SIZE as u32,
+		//	BLIT_1BPP,
+		//);
+		//unsafe { *DRAW_COLORS = 0x30 };
+		//blit(
+		//	&self.centroid_bitmap,
+		//	0,
+		//	0,
+		//	MAP_SIZE as u32,
+		//	MAP_SIZE as u32,
+		//	BLIT_1BPP,
+		//);
 	}
 
 	fn fudge_grid_at_rc(
@@ -199,15 +159,56 @@ impl Map
 	{
 		let x0 = c0 * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
 		let y0 = r0 * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
-		//let x1 = x0 + GRID_CELL_SIZE;
-		//let y1 = y0 + GRID_CELL_SIZE;
-		let cx = x0 + GRID_CELL_SIZE / 2 - 1;
-		let cy = y0 + GRID_CELL_SIZE / 2 - 1;
-		let center_value = rng.u8(0..4);
-		draw_on_quadmap(&mut self.hit_quadmap, cx, cy, center_value);
-		draw_on_quadmap(&mut self.hit_quadmap, cx + 1, cy, center_value);
-		draw_on_quadmap(&mut self.hit_quadmap, cx, cy + 1, center_value);
-		draw_on_quadmap(&mut self.hit_quadmap, cx + 1, cy + 1, center_value);
+		let mut canvas = [[0u8; GRID_CELL_SIZE]; GRID_CELL_SIZE];
+		for dy in 0..GRID_CELL_SIZE
+		{
+			for dx in 0..GRID_CELL_SIZE
+			{
+				canvas[dy][dx] = rng.u8(0..4);
+			}
+		}
+		for dy in 0..GRID_CELL_SIZE
+		{
+			canvas[dy].sort_unstable_by_key(|v| 0b01 ^ (v & 0b01));
+		}
+		for dx in 0..GRID_CELL_SIZE
+		{
+			for _pass in 0..GRID_CELL_SIZE
+			{
+				let mut swapped = false;
+				for dy1 in 1..GRID_CELL_SIZE
+				{
+					let dy0 = dy1 - 1;
+					let r0 = 0b10 ^ (canvas[dy0][dx] & 0b10);
+					let r1 = 0b10 ^ (canvas[dy1][dx] & 0b10);
+					if r0 > r1
+					{
+						let temp = canvas[dy1][dx];
+						canvas[dy1][dx] = canvas[dy0][dx];
+						canvas[dy0][dx] = temp;
+						swapped = true;
+					}
+				}
+				if !swapped
+				{
+					break;
+				}
+			}
+		}
+		for dy in 0..GRID_CELL_SIZE
+		{
+			canvas[dy].sort_unstable_by_key(|v| 0b01 ^ (v & 0b01));
+		}
+		for dy in 1..(GRID_CELL_SIZE - 1)
+		{
+			for dx in 1..(GRID_CELL_SIZE - 1)
+			{
+				let value = canvas[dy][dx];
+				let x = x0 + dx;
+				let y = y0 + dy;
+				draw_on_quadmap(&mut self.hit_quadmap, x, y, value);
+			}
+		}
 	}
 }
 

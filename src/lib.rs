@@ -11,6 +11,7 @@ mod alloc;
 
 mod global_state;
 mod level;
+mod map;
 mod menu;
 mod palette;
 
@@ -19,6 +20,8 @@ use level::Level;
 use menu::Menu;
 
 static GAME: Wrapper<Game> = Wrapper::new(Game::Loading);
+
+const QUICK_TEST: bool = true;
 
 enum Game
 {
@@ -42,7 +45,14 @@ fn update()
         Game::Loading =>
         {
             setup();
-            Some(Progress::Menu)
+            if QUICK_TEST
+            {
+                Some(Progress::Level(level::Transition { rng_seed: 0 }))
+            }
+            else
+            {
+                Some(Progress::Menu)
+            }
         }
         Game::Menu(menu) =>
         {
@@ -51,7 +61,7 @@ fn update()
             {
                 Some(menu::Transition::Start{rng_seed}) =>
                 {
-                    let data = level::Transition{score: 0 };
+                    let data = level::Transition { rng_seed };
                     Some(Progress::Level(data))
                 }
                 None => None
@@ -76,7 +86,7 @@ fn update()
         }
         Some(Progress::Level(data)) =>
         {
-            let level = Level::new();
+            let level = Level::new(data.rng_seed);
             *game = Game::Level(level);
         }
         None => (),

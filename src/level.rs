@@ -6,14 +6,26 @@
 
 use crate::wasm4::*;
 
+use crate::global_state::Wrapper;
+use crate::map::Map;
 use crate::palette;
+
+use fastrand;
+
+static MAP: Wrapper<Map> = Wrapper::new(Map::empty());
 
 pub struct Level {}
 
 impl Level
 {
-	pub fn new() -> Self
+	pub fn new(seed: u64) -> Self
 	{
+		let mut rng = fastrand::Rng::with_seed(seed);
+		{
+			// TODO do this more cleanly?
+			let map = MAP.get_mut();
+			map.generate(&mut rng);
+		}
 		Self {}
 	}
 
@@ -34,6 +46,13 @@ impl Level
 	{
 		unsafe { *PALETTE = palette::DEFAULT };
 
+		unsafe { *DRAW_COLORS = 4 };
+		{
+			// TODO do this more cleanly?
+			let map = MAP.get_mut();
+			map.blit();
+		}
+
 		unsafe { *DRAW_COLORS = 2 };
 		hline(0, 15, 160);
 		unsafe { *DRAW_COLORS = 3 };
@@ -49,5 +68,5 @@ impl Level
 
 pub struct Transition
 {
-	pub score: u8,
+	pub rng_seed: u64,
 }

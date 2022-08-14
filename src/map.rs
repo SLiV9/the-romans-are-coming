@@ -11,6 +11,7 @@ use perlin2d::PerlinNoise2D;
 
 pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
+pub const QUADMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 4;
 pub const GRID_SIZE: usize = 16;
 pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 
@@ -22,14 +23,12 @@ const NOISE_LACUNARITY: f64 = 2.0;
 const NOISE_SCALE: (f64, f64) = (MAP_SIZE as f64, MAP_SIZE as f64);
 const NOISE_BIAS: f64 = 45.0;
 
-const POISSON_DIMENSIONS: [f64; 2] = [MAP_SIZE as f64, MAP_SIZE as f64];
-const POISSON_RADIUS: f64 = 20.0;
-
 pub struct Map
 {
 	bitmap: [u8; BITMAP_SIZE],
-	grid_bitmap: [u8; BITMAP_SIZE],
+	region_bitmap: [u8; BITMAP_SIZE],
 	centroid_bitmap: [u8; BITMAP_SIZE],
+	hit_quadmap: [u8; QUADMAP_SIZE],
 }
 
 impl Map
@@ -38,8 +37,9 @@ impl Map
 	{
 		Self {
 			bitmap: [0; BITMAP_SIZE],
-			grid_bitmap: [0; BITMAP_SIZE],
+			region_bitmap: [0; BITMAP_SIZE],
 			centroid_bitmap: [0; BITMAP_SIZE],
+			hit_quadmap: [0; QUADMAP_SIZE],
 		}
 	}
 
@@ -69,20 +69,18 @@ impl Map
 				{
 					erase_on_bitmap(&mut self.bitmap, x, y);
 				}
-				erase_on_bitmap(&mut self.grid_bitmap, x, y);
+				erase_on_bitmap(&mut self.region_bitmap, x, y);
 				erase_on_bitmap(&mut self.centroid_bitmap, x, y);
-			}
-		}
-		for r in 0..GRID_SIZE
-		{
-			for c in 0..GRID_SIZE
-			{
-				let x = c * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
-				let y = r * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
-				draw_on_bitmap(&mut self.grid_bitmap, x, y);
-				draw_on_bitmap(&mut self.grid_bitmap, x + 1, y);
-				draw_on_bitmap(&mut self.grid_bitmap, x, y + 1);
-				draw_on_bitmap(&mut self.grid_bitmap, x + 1, y + 1);
+				let mut quad_value = 0;
+				if (x % GRID_CELL_SIZE) >= GRID_CELL_SIZE / 2
+				{
+					quad_value |= 0b01;
+				}
+				if (y % GRID_CELL_SIZE) >= GRID_CELL_SIZE / 2
+				{
+					quad_value |= 0b10;
+				}
+				draw_on_quadmap(&mut self.hit_quadmap, x, y, quad_value);
 			}
 		}
 		for r in 0..GRID_SIZE
@@ -101,10 +99,28 @@ impl Map
 				}
 			}
 		}
+		for r1 in 1..GRID_SIZE
+		{
+			let r0 = r1 - 1;
+			for c1 in 1..GRID_SIZE
+			{
+				let c0 = c1 - 1;
+				self.fudge_grid_at_rc(r0, c0, rng);
+			}
+		}
 	}
 
 	pub fn draw(&self)
 	{
+		unsafe { *DRAW_COLORS = 0x4321 };
+		blit(
+			&self.hit_quadmap,
+			0,
+			0,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_2BPP,
+		);
 		unsafe { *DRAW_COLORS = 0x04 };
 		blit(
 			&self.bitmap,
@@ -116,7 +132,7 @@ impl Map
 		);
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
-			&self.grid_bitmap,
+			&self.region_bitmap,
 			0,
 			0,
 			MAP_SIZE as u32,
@@ -132,6 +148,26 @@ impl Map
 			MAP_SIZE as u32,
 			BLIT_1BPP,
 		);
+	}
+
+	fn fudge_grid_at_rc(
+		&mut self,
+		r0: usize,
+		c0: usize,
+		rng: &mut fastrand::Rng,
+	)
+	{
+		let x0 = c0 * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+		let y0 = r0 * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+		//let x1 = x0 + GRID_CELL_SIZE;
+		//let y1 = y0 + GRID_CELL_SIZE;
+		let cx = x0 + GRID_CELL_SIZE / 2 - 1;
+		let cy = y0 + GRID_CELL_SIZE / 2 - 1;
+		let center_value = rng.u8(0..4);
+		draw_on_quadmap(&mut self.hit_quadmap, cx, cy, center_value);
+		draw_on_quadmap(&mut self.hit_quadmap, cx + 1, cy, center_value);
+		draw_on_quadmap(&mut self.hit_quadmap, cx, cy + 1, center_value);
+		draw_on_quadmap(&mut self.hit_quadmap, cx + 1, cy + 1, center_value);
 	}
 }
 
@@ -151,4 +187,20 @@ fn erase_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], x: usize, y: usize)
 	assert!(byte_offset < BITMAP_SIZE);
 	let bit_shift = offset % 8;
 	bitmap[byte_offset] &= !(0b10000000 >> bit_shift);
+}
+
+fn draw_on_quadmap(
+	quadmap: &mut [u8; QUADMAP_SIZE],
+	x: usize,
+	y: usize,
+	value: u8,
+)
+{
+	let offset = y * MAP_SIZE + x;
+	let byte_offset = offset / 4;
+	assert!(byte_offset < QUADMAP_SIZE);
+	let bit_shift = 2 * (offset % 4);
+	quadmap[byte_offset] &= !(0b11000000 >> bit_shift);
+	let value = value & 0b11;
+	quadmap[byte_offset] |= (value << 6) >> bit_shift;
 }

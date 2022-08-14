@@ -1,0 +1,53 @@
+Game design:
+  ✔ Come up with a main game mechanic @done (2022-08-14 15:37)
+  ✔ Choose palette @done (2022-08-14 15:26)
+
+Mechanics:
+  ☐ Basic map generation
+  ☐ Click on map regions
+  ☐ Highlight region with color when hovered
+  ☐ Highlight relevant regions when hovering resource bar
+  ☐ Gather resources
+  ☐ Create fights
+  ☐ Create cities
+  ☐ End of year effects
+
+Content:
+  ☐ Fancy map generation
+  ☐ Mini-objectives
+  ☐ Imperial decrees
+    ☐ Detect when placement is impossible
+  ☐ Tutorial / difficulty curve
+
+Sprites:
+  ☐ Terrain features
+    ☐ Grass
+    ☐ Trees
+    ☐ Hills
+    ☐ Mountains
+    ☐ Waves
+    ☐ Houses
+    ☐ Battlefields/graves
+  ☐ Resource icons
+    ☐ Grain
+    ☐ Wood
+    ☐ Wine
+    ☐ Metal
+    ☐ Points
+    ☐ Laurels
+  ☐ Map of roman empire
+
+Audio:
+  ☐ Resource gathering
+  ☐ Papers moving around
+  ☐ Combat?
+  ☐ Light background music
+
+Usability:
+  ☐ Keyboard controls
+  ☐ Volume options 0/50%/100%
+
+Polish:
+  ☐ Itch.io page
+    ☐ Credits
+  ☐ Publish to WAPM

@@ -10,21 +10,27 @@ mod wasm4;
 mod alloc;
 
 mod global_state;
+mod level;
+mod menu;
 mod palette;
 
 use global_state::Wrapper;
+use level::Level;
+use menu::Menu;
 
 static GAME: Wrapper<Game> = Wrapper::new(Game::Loading);
 
 enum Game
 {
     Loading,
-    Menu,
+    Menu(Menu),
+    Level(Level),
 }
 
 enum Progress
 {
-    Entry,
+    Menu,
+    Level(level::Transition),
 }
 
 #[no_mangle]
@@ -36,18 +42,42 @@ fn update()
         Game::Loading =>
         {
             setup();
-            Some(Progress::Entry)
+            Some(Progress::Menu)
         }
-        Game::Menu =>
+        Game::Menu(menu) =>
         {
-            None
+            let transition = menu.update();
+            match transition
+            {
+                Some(menu::Transition::Start{rng_seed}) =>
+                {
+                    let data = level::Transition{score: 0 };
+                    Some(Progress::Level(data))
+                }
+                None => None
+            }
+        }
+        Game::Level(level) =>
+        {
+            let transition = level.update();
+            match transition
+            {
+                Some(data) => Some(Progress::Level(data)),
+                None => None,
+            }
         }
     };
     match transition
     {
-        Some(Progress::Entry) =>
+        Some(Progress::Menu) =>
         {
-            *game = Game::Menu;
+            let menu = Menu::new();
+            *game = Game::Menu(menu);
+        }
+        Some(Progress::Level(data)) =>
+        {
+            let level = Level::new();
+            *game = Game::Level(level);
         }
         None => (),
     }
@@ -55,7 +85,8 @@ fn update()
     match game
     {
         Game::Loading => (),
-        Game::Menu => (),
+        Game::Menu(menu) => menu.draw(),
+        Game::Level(level) => level.draw(),
     }
 }
 

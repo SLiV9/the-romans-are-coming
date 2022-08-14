@@ -83,6 +83,37 @@ impl Map
 				draw_on_quadmap(&mut self.hit_quadmap, x, y, quad_value);
 			}
 		}
+		let noise = PerlinNoise2D::new(
+			NOISE_OCTAVES,
+			NOISE_AMPLITUDE,
+			8.0,
+			NOISE_PERSISTENCE,
+			NOISE_LACUNARITY,
+			NOISE_SCALE,
+			0.0,
+			noise_seed,
+		);
+		for y in 0..MAP_SIZE
+		{
+			for x in 0..MAP_SIZE
+			{
+				let v = noise.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let period = (2 * GRID_CELL_SIZE) as f64;
+				let t = (y as f64) / period + 0.25;
+				let amplitude = 1.25 * (NOISE_AMPLITUDE as f64);
+				let triangle =
+					amplitude * (4.0 * (t - (t + 0.5).floor()).abs() - 1.0);
+				let w = v + triangle;
+				if w > 0.0
+				{
+					draw_on_bitmap(&mut self.region_bitmap, x, y);
+				}
+				else
+				{
+					erase_on_bitmap(&mut self.region_bitmap, x, y);
+				}
+			}
+		}
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
@@ -112,15 +143,15 @@ impl Map
 
 	pub fn draw(&self)
 	{
-		unsafe { *DRAW_COLORS = 0x4321 };
-		blit(
-			&self.hit_quadmap,
-			0,
-			0,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_2BPP,
-		);
+		//unsafe { *DRAW_COLORS = 0x2341 };
+		//blit(
+		//	&self.hit_quadmap,
+		//	0,
+		//	0,
+		//	MAP_SIZE as u32,
+		//	MAP_SIZE as u32,
+		//	BLIT_2BPP,
+		//);
 		unsafe { *DRAW_COLORS = 0x04 };
 		blit(
 			&self.bitmap,
@@ -138,6 +169,15 @@ impl Map
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
+		);
+		unsafe { *DRAW_COLORS = 0x30 };
+		blit(
+			&self.region_bitmap,
+			0,
+			0,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP | BLIT_ROTATE,
 		);
 		unsafe { *DRAW_COLORS = 0x30 };
 		blit(

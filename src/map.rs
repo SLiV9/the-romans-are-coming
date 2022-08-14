@@ -11,7 +11,7 @@ use perlin2d::PerlinNoise2D;
 
 pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
-pub const GRID_SIZE: usize = 8;
+pub const GRID_SIZE: usize = 16;
 pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 
 const NOISE_OCTAVES: i32 = 4;
@@ -22,9 +22,13 @@ const NOISE_LACUNARITY: f64 = 2.0;
 const NOISE_SCALE: (f64, f64) = (MAP_SIZE as f64, MAP_SIZE as f64);
 const NOISE_BIAS: f64 = 45.0;
 
+const POISSON_DIMENSIONS: [f64; 2] = [MAP_SIZE as f64, MAP_SIZE as f64];
+const POISSON_RADIUS: f64 = 20.0;
+
 pub struct Map
 {
 	bitmap: [u8; BITMAP_SIZE],
+	grid_bitmap: [u8; BITMAP_SIZE],
 	centroid_bitmap: [u8; BITMAP_SIZE],
 }
 
@@ -34,6 +38,7 @@ impl Map
 	{
 		Self {
 			bitmap: [0; BITMAP_SIZE],
+			grid_bitmap: [0; BITMAP_SIZE],
 			centroid_bitmap: [0; BITMAP_SIZE],
 		}
 	}
@@ -64,6 +69,7 @@ impl Map
 				{
 					erase_on_bitmap(&mut self.bitmap, x, y);
 				}
+				erase_on_bitmap(&mut self.grid_bitmap, x, y);
 				erase_on_bitmap(&mut self.centroid_bitmap, x, y);
 			}
 		}
@@ -73,10 +79,26 @@ impl Map
 			{
 				let x = c * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
 				let y = r * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
-				draw_on_bitmap(&mut self.centroid_bitmap, x, y);
-				draw_on_bitmap(&mut self.centroid_bitmap, x + 1, y);
-				draw_on_bitmap(&mut self.centroid_bitmap, x, y + 1);
-				draw_on_bitmap(&mut self.centroid_bitmap, x + 1, y + 1);
+				draw_on_bitmap(&mut self.grid_bitmap, x, y);
+				draw_on_bitmap(&mut self.grid_bitmap, x + 1, y);
+				draw_on_bitmap(&mut self.grid_bitmap, x, y + 1);
+				draw_on_bitmap(&mut self.grid_bitmap, x + 1, y + 1);
+			}
+		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let inner_x = 2 + rng.usize(0..(GRID_CELL_SIZE - 4));
+				let inner_y = 2 + rng.usize(0..(GRID_CELL_SIZE - 4));
+				let x = c * GRID_CELL_SIZE + inner_x;
+				let y = r * GRID_CELL_SIZE + inner_y;
+				{
+					draw_on_bitmap(&mut self.centroid_bitmap, x, y);
+					draw_on_bitmap(&mut self.centroid_bitmap, x + 1, y);
+					draw_on_bitmap(&mut self.centroid_bitmap, x, y + 1);
+					draw_on_bitmap(&mut self.centroid_bitmap, x + 1, y + 1);
+				}
 			}
 		}
 	}
@@ -86,6 +108,15 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x04 };
 		blit(
 			&self.bitmap,
+			0,
+			0,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP,
+		);
+		unsafe { *DRAW_COLORS = 0x20 };
+		blit(
+			&self.grid_bitmap,
 			0,
 			0,
 			MAP_SIZE as u32,

@@ -11,6 +11,8 @@ use perlin2d::PerlinNoise2D;
 
 pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
+pub const GRID_SIZE: usize = 8;
+pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 
 const NOISE_OCTAVES: i32 = 4;
 const NOISE_AMPLITUDE: f64 = 50.0;
@@ -23,6 +25,7 @@ const NOISE_BIAS: f64 = 45.0;
 pub struct Map
 {
 	bitmap: [u8; BITMAP_SIZE],
+	centroid_bitmap: [u8; BITMAP_SIZE],
 }
 
 impl Map
@@ -31,6 +34,7 @@ impl Map
 	{
 		Self {
 			bitmap: [0; BITMAP_SIZE],
+			centroid_bitmap: [0; BITMAP_SIZE],
 		}
 	}
 
@@ -47,27 +51,50 @@ impl Map
 			NOISE_BIAS,
 			noise_seed,
 		);
-		for r in 0..MAP_SIZE
+		for y in 0..MAP_SIZE
 		{
-			for c in 0..MAP_SIZE
+			for x in 0..MAP_SIZE
 			{
-				let elevation = noise.get_noise(r as f64 + 0.5, c as f64 + 0.5);
+				let elevation = noise.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 				if elevation > 0.0
 				{
-					draw_on_bitmap(&mut self.bitmap, r, c);
+					draw_on_bitmap(&mut self.bitmap, x, y);
 				}
 				else
 				{
-					erase_on_bitmap(&mut self.bitmap, r, c);
+					erase_on_bitmap(&mut self.bitmap, x, y);
 				}
+				erase_on_bitmap(&mut self.centroid_bitmap, x, y);
+			}
+		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let x = c * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+				let y = r * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+				draw_on_bitmap(&mut self.centroid_bitmap, x, y);
+				draw_on_bitmap(&mut self.centroid_bitmap, x + 1, y);
+				draw_on_bitmap(&mut self.centroid_bitmap, x, y + 1);
+				draw_on_bitmap(&mut self.centroid_bitmap, x + 1, y + 1);
 			}
 		}
 	}
 
-	pub fn blit(&self)
+	pub fn draw(&self)
 	{
+		unsafe { *DRAW_COLORS = 0x04 };
 		blit(
 			&self.bitmap,
+			0,
+			0,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP,
+		);
+		unsafe { *DRAW_COLORS = 0x30 };
+		blit(
+			&self.centroid_bitmap,
 			0,
 			0,
 			MAP_SIZE as u32,
@@ -77,18 +104,18 @@ impl Map
 	}
 }
 
-fn draw_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], row: usize, col: usize)
+fn draw_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], x: usize, y: usize)
 {
-	let offset = row * MAP_SIZE + col;
+	let offset = y * MAP_SIZE + x;
 	let byte_offset = offset / 8;
 	assert!(byte_offset < BITMAP_SIZE);
 	let bit_shift = offset % 8;
 	bitmap[byte_offset] |= 0b10000000 >> bit_shift;
 }
 
-fn erase_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], row: usize, col: usize)
+fn erase_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], x: usize, y: usize)
 {
-	let offset = row * MAP_SIZE + col;
+	let offset = y * MAP_SIZE + x;
 	let byte_offset = offset / 8;
 	assert!(byte_offset < BITMAP_SIZE);
 	let bit_shift = offset % 8;

@@ -46,23 +46,25 @@ impl Level
 	{
 		unsafe { *PALETTE = palette::DEFAULT };
 
-		unsafe { *DRAW_COLORS = 4 };
 		{
 			// TODO do this more cleanly?
 			let map = MAP.get_mut();
-			map.blit();
+			map.draw();
 		}
 
-		unsafe { *DRAW_COLORS = 2 };
-		hline(0, 15, 160);
-		unsafe { *DRAW_COLORS = 3 };
-		hline(0, 16, 160);
+		if false
+		{
+			unsafe { *DRAW_COLORS = 2 };
+			hline(0, 15, 160);
+			unsafe { *DRAW_COLORS = 3 };
+			hline(0, 16, 160);
 
-		unsafe { *DRAW_COLORS = 0x10 };
-		rect(3, 3, 33, 9);
+			unsafe { *DRAW_COLORS = 0x10 };
+			rect(3, 3, 33, 9);
 
-		unsafe { *DRAW_COLORS = 3 };
-		text("0000", 4, 4);
+			unsafe { *DRAW_COLORS = 3 };
+			text("0000", 4, 4);
+		}
 	}
 }
 

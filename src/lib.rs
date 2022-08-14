@@ -1,30 +1,65 @@
+//
+// Part of the-romans-are-coming
+// Copyright (c) 2022 Sander in 't Veld
+// License: MIT
+//
+
+mod wasm4;
+
 #[cfg(feature = "buddy-alloc")]
 mod alloc;
-mod wasm4;
-use wasm4::*;
 
-#[rustfmt::skip]
-const SMILEY: [u8; 8] = [
-    0b11000011,
-    0b10000001,
-    0b00100100,
-    0b00100100,
-    0b00000000,
-    0b00100100,
-    0b10011001,
-    0b11000011,
-];
+mod global_state;
+mod palette;
+
+use global_state::Wrapper;
+
+static GAME: Wrapper<Game> = Wrapper::new(Game::Loading);
+
+enum Game
+{
+    Loading,
+    Menu,
+}
+
+enum Progress
+{
+    Entry,
+}
 
 #[no_mangle]
-fn update() {
-    unsafe { *DRAW_COLORS = 2 }
-    text("Hello from Rust!", 10, 10);
-
-    let gamepad = unsafe { *GAMEPAD1 };
-    if gamepad & BUTTON_1 != 0 {
-        unsafe { *DRAW_COLORS = 4 }
+fn update()
+{
+    let game = GAME.get_mut();
+    let transition = match game
+    {
+        Game::Loading =>
+        {
+            setup();
+            Some(Progress::Entry)
+        }
+        Game::Menu =>
+        {
+            None
+        }
+    };
+    match transition
+    {
+        Some(Progress::Entry) =>
+        {
+            *game = Game::Menu;
+        }
+        None => (),
     }
 
-    blit(&SMILEY, 76, 76, 8, 8, BLIT_1BPP);
-    text("Press X to blink", 16, 90);
+    match game
+    {
+        Game::Loading => (),
+        Game::Menu => (),
+    }
+}
+
+fn setup()
+{
+    palette::setup();
 }

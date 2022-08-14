@@ -2,8 +2,10 @@
 name = "cart"
 version = "0.1.0"
 edition = "2021"
+authors = ["Sander in 't Veld <sanderintveld@hotmail.com>"]
+license = "MIT"
+readme = "README.md"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 crate-type = ["cdylib"]
 

@@ -394,6 +394,16 @@ impl Map
 			self.cells[0][GRID_SIZE - 1].clear_terrain();
 			self.cells[GRID_SIZE - 1][GRID_SIZE - 1].clear_terrain();
 		}
+		for r in 1..(GRID_SIZE - 1)
+		{
+			for c in 1..(GRID_SIZE - 1)
+			{
+				if (r + c) % 2 == 0
+				{
+					self.merge_cell(r, c, rng);
+				}
+			}
+		}
 		for r in (1..(GRID_SIZE - 1)).step_by(2)
 		{
 			for c in 1..(GRID_SIZE - 1)
@@ -475,7 +485,7 @@ impl Map
 		{
 			for x in 0..MAP_SIZE
 			{
-				let draw = if ((x + y) % 4) >= 2
+				let draw = if ((x + y) % 6) > 0
 				{
 					false
 				}
@@ -503,7 +513,7 @@ impl Map
 							.as_ref()
 							.unwrap()
 							.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-						5.0 * (distance - 4.0 - 5.0) + noise < 0.0
+						10.0 * (distance - 4.0) + noise < 0.0
 					}
 					else
 					{
@@ -513,6 +523,16 @@ impl Map
 				if draw
 				{
 					draw_on_bitmap(&mut self.occupation_bitmap, x, y);
+					if x > 0 && y > 0
+					{
+						draw_on_bitmap(&mut self.occupation_bitmap, x - 1, y);
+						draw_on_bitmap(&mut self.occupation_bitmap, x, y - 1);
+						draw_on_bitmap(
+							&mut self.occupation_bitmap,
+							x - 1,
+							y - 1,
+						);
+					}
 				}
 				else
 				{
@@ -653,9 +673,20 @@ impl Map
 				let sqdis: i32 = ddx * ddx + ddy * ddy;
 				(r, c, sqdis)
 			})
-			.filter(|(r, c, _sqdis)| self.cells[*r][*c].is_occupied)
+			.filter(|(r, c, sqdis)| {
+				self.cells[*r][*c].is_occupied || *sqdis < 4 * 4
+			})
 			.min_by_key(|(_r, _c, sqdis)| *sqdis)
-			.map(|(r, c, sqdis)| (r, c, (sqdis as f64).sqrt()))
+			.map(|(r, c, sqdis)| {
+				if self.cells[r][c].is_occupied
+				{
+					(r, c, (sqdis as f64).sqrt())
+				}
+				else
+				{
+					(r, c, 1000.0)
+				}
+			})
 			.unwrap_or((r0, c0, 1000.0))
 	}
 

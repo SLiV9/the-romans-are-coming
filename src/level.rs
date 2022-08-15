@@ -52,18 +52,18 @@ impl Level
 			map.draw();
 		}
 
-		if false
+		if true
 		{
-			unsafe { *DRAW_COLORS = 2 };
-			hline(0, 15, 160);
+			unsafe { *DRAW_COLORS = 0x11 };
+			rect(0, 0, 160, 10);
 			unsafe { *DRAW_COLORS = 3 };
-			hline(0, 16, 160);
+			hline(0, 9, 160);
 
 			unsafe { *DRAW_COLORS = 0x10 };
-			rect(3, 3, 33, 9);
+			rect(1, 0, 33, 9);
 
 			unsafe { *DRAW_COLORS = 3 };
-			text("0000", 4, 4);
+			text("0000", 2, 1);
 		}
 	}
 }

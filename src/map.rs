@@ -17,21 +17,33 @@ pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 
 const NOISE_OCTAVES: i32 = 5;
 const NOISE_AMPLITUDE: f64 = 50.0;
-const NOISE_FREQUENCY: f64 = 1.0;
+const NOISE_FREQUENCY_ELEVATION: f64 = 1.0;
 const NOISE_FREQUENCY_FOREST: f64 = 1.0;
-const NOISE_PERSISTENCE: f64 = 1.0;
+const NOISE_FREQUENCY_OCCUPATION: f64 = 2.0;
+const NOISE_PERSISTENCE_ELEVATION: f64 = 1.0;
 const NOISE_PERSISTENCE_FOREST: f64 = 2.0;
+const NOISE_PERSISTENCE_OCCUPATION: f64 = 2.0;
 const NOISE_LACUNARITY: f64 = 2.0;
 const NOISE_SCALE: (f64, f64) = (MAP_SIZE as f64, MAP_SIZE as f64);
 const NOISE_BIAS_ELEVATION: f64 = 45.0;
 const NOISE_BIAS_FOREST: f64 = 0.0;
+const NOISE_BIAS_OCCUPATION: f64 = 0.0;
+
+const ELEVATION_THRESHOLD_MOUNTAIN: f64 = 70.0;
+const ELEVATION_THRESHOLD_HILL: f64 = 50.0;
+const ELEVATION_THRESHOLD_WATER: f64 = 0.0;
+const FOREST_THRESHOLD_ON_HILL: f64 = 10.0;
+const FOREST_THRESHOLD_ON_GRASS: f64 = 200.0;
 
 pub struct Map
 {
 	water_bitmap: [u8; BITMAP_SIZE],
+	mountain_bitmap: [u8; BITMAP_SIZE],
 	shade_bitmap: [u8; BITMAP_SIZE],
 	ink_bitmap: [u8; BITMAP_SIZE],
+	occupation_bitmap: [u8; BITMAP_SIZE],
 	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
+	occupation_noise: Option<PerlinNoise2D>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +66,7 @@ struct Cell
 	n_hill: u8,
 	n_forest: u8,
 	n_grass: u8,
+	is_occupied: bool,
 }
 
 const EMPTY_CELL: Cell = Cell {
@@ -64,6 +77,7 @@ const EMPTY_CELL: Cell = Cell {
 	n_hill: 0,
 	n_forest: 0,
 	n_grass: 0,
+	is_occupied: false,
 };
 
 impl Cell
@@ -133,9 +147,12 @@ impl Map
 	{
 		Self {
 			water_bitmap: [0; BITMAP_SIZE],
+			mountain_bitmap: [0; BITMAP_SIZE],
 			shade_bitmap: [0; BITMAP_SIZE],
 			ink_bitmap: [0; BITMAP_SIZE],
+			occupation_bitmap: [0; BITMAP_SIZE],
 			cells: [[EMPTY_CELL; GRID_SIZE]; GRID_SIZE],
+			occupation_noise: None,
 		}
 	}
 
@@ -145,8 +162,8 @@ impl Map
 		let elevation = PerlinNoise2D::new(
 			NOISE_OCTAVES,
 			NOISE_AMPLITUDE,
-			NOISE_FREQUENCY,
-			NOISE_PERSISTENCE,
+			NOISE_FREQUENCY_ELEVATION,
+			NOISE_PERSISTENCE_ELEVATION,
 			NOISE_LACUNARITY,
 			NOISE_SCALE,
 			NOISE_BIAS_ELEVATION,
@@ -163,6 +180,17 @@ impl Map
 			NOISE_BIAS_FOREST,
 			seed,
 		);
+		let seed = rng.u16(..) as i32;
+		self.occupation_noise = Some(PerlinNoise2D::new(
+			NOISE_OCTAVES,
+			NOISE_AMPLITUDE,
+			NOISE_FREQUENCY_OCCUPATION,
+			NOISE_PERSISTENCE_OCCUPATION,
+			NOISE_LACUNARITY,
+			NOISE_SCALE,
+			NOISE_BIAS_OCCUPATION,
+			seed,
+		));
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
@@ -178,17 +206,17 @@ impl Map
 		{
 			for x in 0..MAP_SIZE
 			{
-				let (r, c, distance) =
+				let (r, c, _distance) =
 					self.closest_rc_to_xy(x as i32, y as i32);
 				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				let terrain_type = if e > 70.0
+				let terrain_type = if e > ELEVATION_THRESHOLD_MOUNTAIN
 				{
 					TerrainType::Mountain
 				}
-				else if e > 50.0
+				else if e > ELEVATION_THRESHOLD_HILL
 				{
-					if f > 10.0
+					if f > FOREST_THRESHOLD_ON_HILL
 					{
 						TerrainType::Forest
 					}
@@ -197,9 +225,9 @@ impl Map
 						TerrainType::Hill
 					}
 				}
-				else if e > 0.0
+				else if e > ELEVATION_THRESHOLD_WATER
 				{
-					if f > 200.0
+					if f > FOREST_THRESHOLD_ON_GRASS
 					{
 						TerrainType::Forest
 					}
@@ -222,10 +250,12 @@ impl Map
 				}
 				if terrain_type == TerrainType::Mountain
 				{
+					draw_on_bitmap(&mut self.mountain_bitmap, x, y);
 					draw_on_bitmap(&mut self.ink_bitmap, x, y);
 				}
 				else
 				{
+					erase_on_bitmap(&mut self.mountain_bitmap, x, y);
 					erase_on_bitmap(&mut self.ink_bitmap, x, y);
 				}
 				if terrain_type == TerrainType::Forest
@@ -303,7 +333,7 @@ impl Map
 				}
 				else if cell.n_hill > n_total / 2
 				{
-					te = 60.0;
+					te = ELEVATION_THRESHOLD_HILL + 10.0;
 					tf = -200.0;
 					TerrainType::Hill
 				}
@@ -413,7 +443,80 @@ impl Map
 				}
 				else
 				{
-					draw_on_bitmap(&mut self.ink_bitmap, x, y);
+					//draw_on_bitmap(&mut self.ink_bitmap, x, y);
+				}
+			}
+		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..2
+			{
+				let cell = &mut self.cells[r][c];
+				match cell.terrain_type()
+				{
+					Some(TerrainType::Mountain) | Some(TerrainType::Water) =>
+					{
+						()
+					}
+					_ =>
+					{
+						cell.is_occupied = (c == 0) || rng.bool();
+					}
+				}
+			}
+		}
+		self.update_occupation();
+	}
+
+	pub fn update_occupation(&mut self)
+	{
+		// TODO only update a subsection if we know where the update took place
+		for y in 0..MAP_SIZE
+		{
+			for x in 0..MAP_SIZE
+			{
+				let draw = if ((x + y) % 4) >= 2
+				{
+					false
+				}
+				else
+				{
+					let (r, c, distance) =
+						self.closest_rc_to_xy(x as i32, y as i32);
+					if !self.cells[r][c].is_occupied
+					{
+						false
+					}
+					else if is_on_bitmap(&self.water_bitmap, x, y)
+						|| is_on_bitmap(&self.mountain_bitmap, x, y)
+					{
+						false
+					}
+					else if distance < 4.0
+					{
+						true
+					}
+					else if distance < 4.0 + 10.0
+					{
+						let noise = self
+							.occupation_noise
+							.as_ref()
+							.unwrap()
+							.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+						10.0 * (distance - 4.0 - 5.0) + noise < 0.0
+					}
+					else
+					{
+						false
+					}
+				};
+				if draw
+				{
+					draw_on_bitmap(&mut self.occupation_bitmap, x, y);
+				}
+				else
+				{
+					erase_on_bitmap(&mut self.occupation_bitmap, x, y);
 				}
 			}
 		}
@@ -422,7 +525,7 @@ impl Map
 	pub fn draw(&self)
 	{
 		let x = 0;
-		let y = 0;
+		let y = 5;
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.shade_bitmap,
@@ -435,6 +538,15 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x40 };
 		blit(
 			&self.water_bitmap,
+			x,
+			y,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP,
+		);
+		unsafe { *DRAW_COLORS = 0x40 };
+		blit(
+			&self.occupation_bitmap,
 			x,
 			y,
 			MAP_SIZE as u32,
@@ -535,6 +647,15 @@ fn erase_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], x: usize, y: usize)
 	assert!(byte_offset < BITMAP_SIZE);
 	let bit_shift = offset % 8;
 	bitmap[byte_offset] &= !(0b10000000 >> bit_shift);
+}
+
+fn is_on_bitmap(bitmap: &[u8; BITMAP_SIZE], x: usize, y: usize) -> bool
+{
+	let offset = y * MAP_SIZE + x;
+	let byte_offset = offset / 8;
+	assert!(byte_offset < BITMAP_SIZE);
+	let bit_shift = offset % 8;
+	bitmap[byte_offset] & (0b10000000 >> bit_shift) > 0
 }
 
 fn draw_on_quadmap(

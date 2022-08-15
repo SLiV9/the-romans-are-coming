@@ -66,6 +66,67 @@ const EMPTY_CELL: Cell = Cell {
 	n_grass: 0,
 };
 
+impl Cell
+{
+	fn terrain_type(&self) -> Option<TerrainType>
+	{
+		if self.n_water > 0
+		{
+			Some(TerrainType::Water)
+		}
+		else if self.n_mountain > 0
+		{
+			Some(TerrainType::Mountain)
+		}
+		else if self.n_hill > 0
+		{
+			Some(TerrainType::Hill)
+		}
+		else if self.n_forest > 0
+		{
+			Some(TerrainType::Forest)
+		}
+		else if self.n_grass > 0
+		{
+			Some(TerrainType::Grass)
+		}
+		else
+		{
+			None
+		}
+	}
+
+	fn clear_terrain(&mut self)
+	{
+		self.n_water = 0;
+		self.n_mountain = 0;
+		self.n_hill = 0;
+		self.n_forest = 0;
+		self.n_grass = 0;
+	}
+
+	fn make_crucial(&mut self)
+	{
+		if !self.is_crucial()
+		{
+			self.n_water *= 2;
+			self.n_mountain *= 2;
+			self.n_hill *= 2;
+			self.n_forest *= 2;
+			self.n_grass *= 2;
+		}
+	}
+
+	fn is_crucial(&self) -> bool
+	{
+		self.n_water >= 2
+			|| self.n_mountain >= 2
+			|| self.n_hill >= 2
+			|| self.n_forest >= 2
+			|| self.n_grass >= 2
+	}
+}
+
 impl Map
 {
 	pub const fn empty() -> Self
@@ -110,11 +171,7 @@ impl Map
 				let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
 				cell.centroid_x = x as u8;
 				cell.centroid_y = y as u8;
-				cell.n_water = 0;
-				cell.n_mountain = 0;
-				cell.n_forest = 0;
-				cell.n_hill = 0;
-				cell.n_grass = 0;
+				cell.clear_terrain();
 			}
 		}
 		for y in 0..MAP_SIZE
@@ -265,11 +322,7 @@ impl Map
 				else
 				{
 					// This is a bad cell.
-					cell.n_water = 0;
-					cell.n_mountain = 0;
-					cell.n_hill = 0;
-					cell.n_forest = 0;
-					cell.n_grass = 0;
+					cell.clear_terrain();
 					continue;
 				};
 				let x = cell.centroid_x as usize;
@@ -306,6 +359,20 @@ impl Map
 					TerrainType::Hill => cell.n_hill += 1,
 					TerrainType::Mountain => cell.n_mountain += 1,
 					TerrainType::Water => cell.n_water += 1,
+				}
+			}
+			for r in (1..(GRID_SIZE - 1)).step_by(2)
+			{
+				for c in 1..(GRID_SIZE - 1)
+				{
+					self.merge_cell(r, c, rng);
+				}
+			}
+			for r in (2..(GRID_SIZE - 2)).step_by(2)
+			{
+				for c in (1..(GRID_SIZE - 1)).step_by(2)
+				{
+					self.merge_cell(r, c, rng);
 				}
 			}
 		}
@@ -363,6 +430,30 @@ impl Map
 			.min_by_key(|(_r, _c, sqdis)| *sqdis)
 			.map(|(r, c, sqdis)| (r, c, (sqdis as f64).sqrt()))
 			.unwrap()
+	}
+
+	fn merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
+	{
+		let tt = self.cells[r][c].terrain_type();
+		if tt.is_none()
+		{
+			return;
+		}
+		else if self.cells[r][c].is_crucial()
+		{
+			return;
+		}
+		let mut adjacents = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)];
+		rng.shuffle(&mut adjacents);
+		for (rr, cc) in adjacents
+		{
+			if self.cells[rr][cc].terrain_type() == tt
+			{
+				self.cells[r][c].clear_terrain();
+				self.cells[rr][cc].make_crucial();
+				break;
+			}
+		}
 	}
 }
 

@@ -105,7 +105,7 @@ impl Cell
 		self.n_grass = 0;
 	}
 
-	fn make_crucial(&mut self)
+	fn make_more_important(&mut self)
 	{
 		if !self.is_crucial()
 		{
@@ -119,11 +119,11 @@ impl Cell
 
 	fn is_crucial(&self) -> bool
 	{
-		self.n_water >= 2
-			|| self.n_mountain >= 2
-			|| self.n_hill >= 2
-			|| self.n_forest >= 2
-			|| self.n_grass >= 2
+		self.n_water >= 8
+			|| self.n_mountain >= 8
+			|| self.n_hill >= 8
+			|| self.n_forest >= 8
+			|| self.n_grass >= 8
 	}
 }
 
@@ -298,13 +298,13 @@ impl Map
 				}
 				else if cell.n_mountain > n_total / 2
 				{
-					te = 100.0;
+					te = 1000.0;
 					TerrainType::Mountain
 				}
 				else if cell.n_hill > n_total / 2
 				{
 					te = 60.0;
-					tf = -20.0;
+					tf = -200.0;
 					TerrainType::Hill
 				}
 				else if cell.n_forest > n_total / 2
@@ -316,7 +316,7 @@ impl Map
 				else if cell.n_grass > n_total / 2
 				{
 					te = 10.0;
-					tf = -20.0;
+					tf = -200.0;
 					TerrainType::Grass
 				}
 				else
@@ -347,32 +347,60 @@ impl Map
 						badness = b;
 					}
 				}
-				{
-					let x = cell.centroid_x as usize;
-					let y = cell.centroid_y as usize;
-					draw_on_bitmap(&mut self.ink_bitmap, x, y);
-				}
+				cell.clear_terrain();
 				match terrain_type
 				{
-					TerrainType::Grass => cell.n_grass += 1,
-					TerrainType::Forest => cell.n_forest += 1,
-					TerrainType::Hill => cell.n_hill += 1,
-					TerrainType::Mountain => cell.n_mountain += 1,
-					TerrainType::Water => cell.n_water += 1,
+					TerrainType::Grass => cell.n_grass = 1,
+					TerrainType::Forest => cell.n_forest = 1,
+					TerrainType::Hill => cell.n_hill = 1,
+					TerrainType::Mountain => cell.n_mountain = 1,
+					TerrainType::Water => cell.n_water = 1,
 				}
 			}
-			for r in (1..(GRID_SIZE - 1)).step_by(2)
+		}
+		for r in (1..(GRID_SIZE - 1)).step_by(2)
+		{
+			for c in 1..(GRID_SIZE - 1)
 			{
-				for c in 1..(GRID_SIZE - 1)
-				{
-					self.merge_cell(r, c, rng);
-				}
+				self.merge_cell(r, c, rng);
 			}
-			for r in (2..(GRID_SIZE - 2)).step_by(2)
+		}
+		for r in (2..(GRID_SIZE - 2)).step_by(2)
+		{
+			for c in (1..(GRID_SIZE - 1)).step_by(2)
 			{
-				for c in (1..(GRID_SIZE - 1)).step_by(2)
+				self.merge_cell(r, c, rng);
+			}
+		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let cell = &self.cells[r][c];
+				let x = cell.centroid_x as usize;
+				let y = cell.centroid_y as usize;
+				if cell.terrain_type().is_some()
 				{
-					self.merge_cell(r, c, rng);
+					draw_on_bitmap(&mut self.ink_bitmap, x, y);
+					draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
+					draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
+					draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
+					if cell.n_forest > 0 || cell.n_water > 0
+					{
+						erase_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
+					}
+					if cell.n_mountain > 0 || cell.n_water > 0
+					{
+						erase_on_bitmap(&mut self.ink_bitmap, x, y + 1);
+					}
+					if cell.n_hill > 0
+					{
+						erase_on_bitmap(&mut self.ink_bitmap, x + 1, y);
+					}
+				}
+				else
+				{
+					draw_on_bitmap(&mut self.ink_bitmap, x, y);
 				}
 			}
 		}
@@ -449,8 +477,20 @@ impl Map
 		{
 			if self.cells[rr][cc].terrain_type() == tt
 			{
-				self.cells[r][c].clear_terrain();
-				self.cells[rr][cc].make_crucial();
+				if self.cells[rr][cc].is_crucial()
+				{
+					self.cells[r][c].clear_terrain();
+				}
+				else if rng.bool()
+				{
+					self.cells[rr][cc].clear_terrain();
+					self.cells[r][c].make_more_important();
+				}
+				else
+				{
+					self.cells[r][c].clear_terrain();
+					self.cells[rr][cc].make_more_important();
+				}
 				break;
 			}
 		}

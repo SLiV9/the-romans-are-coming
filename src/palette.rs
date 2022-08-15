@@ -18,7 +18,7 @@ pub const GREEN: u32 = 0xb2af5c;
 pub const BLUE: u32 = 0xa7a79e;
 pub const PURPLE: u32 = 0x9b6970;
 
-pub const DEFAULT: [u32; 4] = WATER;
+pub const DEFAULT: [u32; 4] = [PAPER, BROWN, BLACK, PAPER];
 pub const SNOW: [u32; 4] = [PAPER, BROWN, BLACK, WHITE];
 pub const BLOOD: [u32; 4] = [PAPER, BROWN, BLACK, RED];
 pub const GOLD: [u32; 4] = [PAPER, BROWN, BLACK, YELLOW];

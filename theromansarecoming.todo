@@ -3,7 +3,7 @@ Game design:
   ✔ Choose palette @done (2022-08-14 15:26)
 
 Mechanics:
-  ☐ Basic map generation
+  ✔ Basic map generation @done (2022-08-15 18:42)
   ☐ Click on map regions
   ☐ Highlight region with color when hovered
   ☐ Highlight relevant regions when hovering resource bar
@@ -21,11 +21,11 @@ Content:
 
 Sprites:
   ☐ Terrain features
-    ☐ Grass
-    ☐ Trees
-    ☐ Hills
-    ☐ Mountains
-    ☐ Waves
+    ✔ Grass @done (2022-08-15 18:42)
+    ✔ Trees @done (2022-08-15 18:42)
+    ✔ Hills @done (2022-08-15 18:42)
+    ✔ Mountains @done (2022-08-15 18:42)
+    ✔ Waves @done (2022-08-15 18:42)
     ☐ Houses
     ☐ Battlefields/graves
   ☐ Resource icons

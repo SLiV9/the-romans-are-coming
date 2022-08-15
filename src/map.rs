@@ -6,6 +6,8 @@
 
 use crate::wasm4::*;
 
+use crate::sprites;
+
 use fastrand;
 use perlin2d::PerlinNoise2D;
 
@@ -39,7 +41,7 @@ pub struct Map
 {
 	water_bitmap: [u8; BITMAP_SIZE],
 	mountain_bitmap: [u8; BITMAP_SIZE],
-	shade_bitmap: [u8; BITMAP_SIZE],
+	debug_bitmap: [u8; BITMAP_SIZE],
 	ink_bitmap: [u8; BITMAP_SIZE],
 	occupation_bitmap: [u8; BITMAP_SIZE],
 	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
@@ -148,7 +150,7 @@ impl Map
 		Self {
 			water_bitmap: [0; BITMAP_SIZE],
 			mountain_bitmap: [0; BITMAP_SIZE],
-			shade_bitmap: [0; BITMAP_SIZE],
+			debug_bitmap: [0; BITMAP_SIZE],
 			ink_bitmap: [0; BITMAP_SIZE],
 			occupation_bitmap: [0; BITMAP_SIZE],
 			cells: [[EMPTY_CELL; GRID_SIZE]; GRID_SIZE],
@@ -251,21 +253,31 @@ impl Map
 				if terrain_type == TerrainType::Mountain
 				{
 					draw_on_bitmap(&mut self.mountain_bitmap, x, y);
-					draw_on_bitmap(&mut self.ink_bitmap, x, y);
+					if (x + y) % 2 == 0
+					{
+						draw_on_bitmap(&mut self.debug_bitmap, x, y);
+					}
+					else
+					{
+						erase_on_bitmap(&mut self.debug_bitmap, x, y);
+					}
 				}
 				else
 				{
 					erase_on_bitmap(&mut self.mountain_bitmap, x, y);
-					erase_on_bitmap(&mut self.ink_bitmap, x, y);
+					erase_on_bitmap(&mut self.debug_bitmap, x, y);
 				}
-				if terrain_type == TerrainType::Forest
-					|| terrain_type == TerrainType::Hill && ((x + y) % 2 == 1)
+				if (terrain_type == TerrainType::Forest
+					&& ((x + y) % 2 == 0)
+					&& (x % 4 == 0) && (y % 4 == 0))
+					|| (terrain_type == TerrainType::Hill
+						&& ((x + y) % 2 == 0) && (x % 4 == 0 || y % 4 == 0))
 				{
-					draw_on_bitmap(&mut self.shade_bitmap, x, y);
+					draw_on_bitmap(&mut self.debug_bitmap, x, y);
 				}
 				else
 				{
-					erase_on_bitmap(&mut self.shade_bitmap, x, y);
+					erase_on_bitmap(&mut self.debug_bitmap, x, y);
 				}
 				let cell = &mut self.cells[r][c];
 				match terrain_type
@@ -360,7 +372,7 @@ impl Map
 				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 				let mut badness = (te - e).abs() + (tf - f).abs();
-				for _i in 0..10
+				for _i in 0..50
 				{
 					if badness < 2.0
 					{
@@ -432,24 +444,12 @@ impl Map
 				let cell = &self.cells[r][c];
 				let x = cell.centroid_x as usize;
 				let y = cell.centroid_y as usize;
-				if cell.terrain_type().is_some()
+				if cell.terrain_type().is_some() && cell.n_water == 0
 				{
 					draw_on_bitmap(&mut self.ink_bitmap, x, y);
 					draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
 					draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
 					draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
-					if cell.n_forest > 0 || cell.n_water > 0
-					{
-						erase_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
-					}
-					if cell.n_mountain > 0 || cell.n_water > 0
-					{
-						erase_on_bitmap(&mut self.ink_bitmap, x, y + 1);
-					}
-					if cell.n_hill > 0
-					{
-						erase_on_bitmap(&mut self.ink_bitmap, x + 1, y);
-					}
 				}
 				else if false
 				{
@@ -544,31 +544,31 @@ impl Map
 
 	pub fn draw(&self)
 	{
-		let x = 0;
-		let y = 5;
+		let map_x = 0;
+		let map_y = 5;
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
-			&self.shade_bitmap,
-			x,
-			y,
+			&self.debug_bitmap,
+			map_x,
+			map_y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
 		);
-		unsafe { *DRAW_COLORS = 0x40 };
+		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.water_bitmap,
-			x,
-			y,
+			map_x,
+			map_y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
 		);
-		unsafe { *DRAW_COLORS = 0x40 };
+		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.occupation_bitmap,
-			x,
-			y,
+			map_x,
+			map_y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -576,8 +576,8 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x30 };
 		blit(
 			&self.ink_bitmap,
-			x,
-			y,
+			map_x,
+			map_y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -589,20 +589,73 @@ impl Map
 			{
 				for c in 0..GRID_SIZE
 				{
-					let x0 = x + self.cells[r][c].centroid_x as i32;
-					let y0 = y + self.cells[r][c].centroid_y as i32;
+					let x0 = map_x + self.cells[r][c].centroid_x as i32;
+					let y0 = map_y + self.cells[r][c].centroid_y as i32;
 					if r > 0
 					{
-						let xx = x + self.cells[r - 1][c].centroid_x as i32;
-						let yy = y + self.cells[r - 1][c].centroid_y as i32;
+						let xx = map_x + self.cells[r - 1][c].centroid_x as i32;
+						let yy = map_y + self.cells[r - 1][c].centroid_y as i32;
 						line(x0, y0, xx, yy);
 					}
 					if c > 0
 					{
-						let xx = x + self.cells[r][c - 1].centroid_x as i32;
-						let yy = y + self.cells[r][c - 1].centroid_y as i32;
+						let xx = map_x + self.cells[r][c - 1].centroid_x as i32;
+						let yy = map_y + self.cells[r][c - 1].centroid_y as i32;
 						line(x0, y0, xx, yy);
 					}
+				}
+			}
+		}
+
+		unsafe { *DRAW_COLORS = 0x4320 };
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let cell = &self.cells[r][c];
+				match cell.terrain_type()
+				{
+					Some(TerrainType::Water) =>
+					{
+						sprites::draw_boat(
+							map_x + (cell.centroid_x as i32),
+							map_y + (cell.centroid_y as i32),
+							((2 * r + 3 * c) % 17) as u8,
+						);
+					}
+					Some(TerrainType::Mountain) =>
+					{
+						sprites::draw_mountain(
+							map_x + (cell.centroid_x as i32) - 1,
+							map_y + (cell.centroid_y as i32) + 1,
+							((2 * r + 3 * c) % 17) as u8,
+						);
+					}
+					Some(TerrainType::Hill) =>
+					{
+						sprites::draw_hill(
+							map_x + (cell.centroid_x as i32) - 1,
+							map_y + (cell.centroid_y as i32) - 2,
+							((2 * r + 3 * c) % 17) as u8,
+						);
+					}
+					Some(TerrainType::Forest) =>
+					{
+						sprites::draw_tree(
+							map_x + (cell.centroid_x as i32) - 2,
+							map_y + (cell.centroid_y as i32),
+							((2 * r + 3 * c) % 17) as u8,
+						);
+					}
+					Some(TerrainType::Grass) =>
+					{
+						sprites::draw_grass(
+							map_x + (cell.centroid_x as i32) - 4,
+							map_y + (cell.centroid_y as i32),
+							((2 * r + 3 * c) % 17) as u8,
+						);
+					}
+					_ => (),
 				}
 			}
 		}

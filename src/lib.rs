@@ -14,6 +14,7 @@ mod level;
 mod map;
 mod menu;
 mod palette;
+mod sprites;
 
 use global_state::Wrapper;
 use level::Level;

@@ -9,10 +9,10 @@ use crate::wasm4::*;
 use fastrand;
 use perlin2d::PerlinNoise2D;
 
-pub const MAP_SIZE: usize = 160;
+pub const MAP_SIZE: usize = 180;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
 pub const QUADMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 4;
-pub const GRID_SIZE: usize = 16;
+pub const GRID_SIZE: usize = 9;
 pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 
 const NOISE_OCTAVES: i32 = 4;
@@ -29,7 +29,20 @@ pub struct Map
 	region_bitmap: [u8; BITMAP_SIZE],
 	centroid_bitmap: [u8; BITMAP_SIZE],
 	hit_quadmap: [u8; QUADMAP_SIZE],
+	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
 }
+
+#[derive(Debug, Clone, Copy, Default)]
+struct Cell
+{
+	centroid_x: u8,
+	centroid_y: u8,
+}
+
+const EMPTY_CELL: Cell = Cell {
+	centroid_x: 0,
+	centroid_y: 0,
+};
 
 impl Map
 {
@@ -40,6 +53,7 @@ impl Map
 			region_bitmap: [0; BITMAP_SIZE],
 			centroid_bitmap: [0; BITMAP_SIZE],
 			hit_quadmap: [0; QUADMAP_SIZE],
+			cells: [[EMPTY_CELL; GRID_SIZE]; GRID_SIZE],
 		}
 	}
 
@@ -117,6 +131,8 @@ impl Map
 				let inner_y = 2 + rng.usize(0..(GRID_CELL_SIZE - 4));
 				let x = c * GRID_CELL_SIZE + inner_x;
 				let y = r * GRID_CELL_SIZE + inner_y;
+				self.cells[r][c].centroid_x = x as u8;
+				self.cells[r][c].centroid_y = y as u8;
 				{
 					draw_on_bitmap(&mut self.centroid_bitmap, x, y);
 					draw_on_bitmap(&mut self.centroid_bitmap, x + 1, y);
@@ -138,38 +154,40 @@ impl Map
 
 	pub fn draw(&self)
 	{
-		//unsafe { *DRAW_COLORS = 0x2341 };
+		let x = -(GRID_CELL_SIZE as i32) / 2;
+		let y = x;
+		unsafe { *DRAW_COLORS = 0x2341 };
+		blit(
+			&self.hit_quadmap,
+			x,
+			y,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_2BPP,
+		);
+		//unsafe { *DRAW_COLORS = 0x04 };
 		//blit(
-		//	&self.hit_quadmap,
-		//	0,
-		//	0,
+		//	&self.bitmap,
+		//	x,
+		//	y,
 		//	MAP_SIZE as u32,
 		//	MAP_SIZE as u32,
-		//	BLIT_2BPP,
+		//	BLIT_1BPP,
 		//);
-		unsafe { *DRAW_COLORS = 0x04 };
-		blit(
-			&self.bitmap,
-			0,
-			0,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_1BPP,
-		);
-		unsafe { *DRAW_COLORS = 0x20 };
-		blit(
-			&self.region_bitmap,
-			0,
-			0,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_1BPP,
-		);
+		//unsafe { *DRAW_COLORS = 0x20 };
+		//blit(
+		//	&self.region_bitmap,
+		//	x,
+		//	y,
+		//	MAP_SIZE as u32,
+		//	MAP_SIZE as u32,
+		//	BLIT_1BPP,
+		//);
 		unsafe { *DRAW_COLORS = 0x30 };
 		blit(
 			&self.centroid_bitmap,
-			0,
-			0,
+			x,
+			y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -190,44 +208,24 @@ impl Map
 		{
 			for dx in 0..GRID_CELL_SIZE
 			{
-				canvas[dy][dx] = rng.u8(0..4);
+				let x = x0 + dx;
+				let y = y0 + dy;
+				canvas[dy][dx] = (0..4)
+					.min_by_key(|i| {
+						let r = r0 + 1 - i / 2;
+						let c = c0 + 1 - i % 2;
+						let cell = &self.cells[r][c];
+						let ddx = cell.centroid_x as i32 - x as i32;
+						let ddy = cell.centroid_y as i32 - y as i32;
+						ddx * ddx + ddy * ddy
+					})
+					.map(|i| i as u8)
+					.unwrap_or(rng.u8(0..4));
 			}
 		}
 		for dy in 0..GRID_CELL_SIZE
 		{
-			canvas[dy].sort_unstable_by_key(|v| 0b01 ^ (v & 0b01));
-		}
-		for dx in 0..GRID_CELL_SIZE
-		{
-			for _pass in 0..GRID_CELL_SIZE
-			{
-				let mut swapped = false;
-				for dy1 in 1..GRID_CELL_SIZE
-				{
-					let dy0 = dy1 - 1;
-					let r0 = 0b10 ^ (canvas[dy0][dx] & 0b10);
-					let r1 = 0b10 ^ (canvas[dy1][dx] & 0b10);
-					if r0 > r1
-					{
-						let temp = canvas[dy1][dx];
-						canvas[dy1][dx] = canvas[dy0][dx];
-						canvas[dy0][dx] = temp;
-						swapped = true;
-					}
-				}
-				if !swapped
-				{
-					break;
-				}
-			}
-		}
-		for dy in 0..GRID_CELL_SIZE
-		{
-			canvas[dy].sort_unstable_by_key(|v| 0b01 ^ (v & 0b01));
-		}
-		for dy in 1..(GRID_CELL_SIZE - 1)
-		{
-			for dx in 1..(GRID_CELL_SIZE - 1)
+			for dx in 0..GRID_CELL_SIZE
 			{
 				let value = canvas[dy][dx];
 				let x = x0 + dx;

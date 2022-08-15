@@ -441,7 +441,7 @@ impl Map
 						erase_on_bitmap(&mut self.ink_bitmap, x + 1, y);
 					}
 				}
-				else
+				else if false
 				{
 					draw_on_bitmap(&mut self.ink_bitmap, x, y);
 				}
@@ -482,7 +482,7 @@ impl Map
 				else
 				{
 					let (r, c, distance) =
-						self.closet_occupied_rc_to_xy(x as i32, y as i32);
+						self.closest_occupied_rc_to_xy(x as i32, y as i32);
 					if !self.cells[r][c].is_occupied
 					{
 						false
@@ -496,7 +496,7 @@ impl Map
 					{
 						true
 					}
-					else if distance < 4.0 + 10.0 && false
+					else if distance < 4.0 + 10.0
 					{
 						let noise = self
 							.occupation_noise
@@ -562,35 +562,62 @@ impl Map
 			MAP_SIZE as u32,
 			BLIT_1BPP,
 		);
-		unsafe { *DRAW_COLORS = 3 };
-		for r in 0..GRID_SIZE
+		if false
 		{
-			for c in 0..GRID_SIZE
+			unsafe { *DRAW_COLORS = 3 };
+			for r in 0..GRID_SIZE
 			{
-				let x0 = x + self.cells[r][c].centroid_x as i32;
-				let y0 = y + self.cells[r][c].centroid_y as i32;
-				if r > 0
+				for c in 0..GRID_SIZE
 				{
-					let xx = x + self.cells[r - 1][c].centroid_x as i32;
-					let yy = y + self.cells[r - 1][c].centroid_y as i32;
-					line(x0, y0, xx, yy);
-				}
-				if c > 0
-				{
-					let xx = x + self.cells[r][c - 1].centroid_x as i32;
-					let yy = y + self.cells[r][c - 1].centroid_y as i32;
-					line(x0, y0, xx, yy);
+					let x0 = x + self.cells[r][c].centroid_x as i32;
+					let y0 = y + self.cells[r][c].centroid_y as i32;
+					if r > 0
+					{
+						let xx = x + self.cells[r - 1][c].centroid_x as i32;
+						let yy = y + self.cells[r - 1][c].centroid_y as i32;
+						line(x0, y0, xx, yy);
+					}
+					if c > 0
+					{
+						let xx = x + self.cells[r][c - 1].centroid_x as i32;
+						let yy = y + self.cells[r][c - 1].centroid_y as i32;
+						line(x0, y0, xx, yy);
+					}
 				}
 			}
 		}
 	}
 
-	fn closest_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
+	fn r0_c0_for_xy(&self, x: i32, y: i32) -> (usize, usize)
 	{
 		let xx = std::cmp::max(0, x) as usize;
 		let yy = std::cmp::max(0, y) as usize;
-		let r0 = std::cmp::min(yy / GRID_CELL_SIZE, GRID_SIZE - 2);
-		let c0 = std::cmp::min(xx / GRID_CELL_SIZE, GRID_SIZE - 2);
+		let r = std::cmp::min(yy / GRID_CELL_SIZE, GRID_SIZE - 1);
+		let c = std::cmp::min(xx / GRID_CELL_SIZE, GRID_SIZE - 1);
+		let r0 = if r > 0
+			&& (r + 1 == GRID_SIZE || y < (self.cells[r][c].centroid_y as i32))
+		{
+			r - 1
+		}
+		else
+		{
+			r
+		};
+		let c0 = if c > 0
+			&& (c + 1 == GRID_SIZE || x < (self.cells[r][c].centroid_x as i32))
+		{
+			c - 1
+		}
+		else
+		{
+			c
+		};
+		(r0, c0)
+	}
+
+	fn closest_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
+	{
+		let (r0, c0) = self.r0_c0_for_xy(x, y);
 		(0..4)
 			.map(|i| {
 				let r = r0 + 1 - i / 2;
@@ -606,16 +633,9 @@ impl Map
 			.unwrap()
 	}
 
-	fn closet_occupied_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
+	fn closest_occupied_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
 	{
-		let xx = std::cmp::max(0, x) as usize;
-		let yy = std::cmp::max(0, y) as usize;
-		let r0 = std::cmp::min(yy / GRID_CELL_SIZE, GRID_SIZE - 2);
-		let c0 = std::cmp::min(xx / GRID_CELL_SIZE, GRID_SIZE - 2);
-		if x == 20 && y >= 17 && y <= 20
-		{
-			trace(format!("{:?}", self.cells[r0][c0]));
-		}
+		let (r0, c0) = self.r0_c0_for_xy(x, y);
 		if self.cells[r0][c0].is_occupied
 			&& self.cells[r0][c0 + 1].is_occupied
 			&& self.cells[r0 + 1][c0].is_occupied
@@ -734,7 +754,7 @@ fn pick_random_centroid_xy_at_rc(
 	rng: &mut fastrand::Rng,
 ) -> (usize, usize)
 {
-	let padding = 3;
+	let padding = 2;
 	let inner_x = padding + rng.usize(0..(GRID_CELL_SIZE - 2 * padding));
 	let inner_y = padding + rng.usize(0..(GRID_CELL_SIZE - 2 * padding));
 	let x = c * GRID_CELL_SIZE + inner_x;

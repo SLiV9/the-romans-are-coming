@@ -9,7 +9,7 @@ use crate::wasm4::*;
 use fastrand;
 use perlin2d::PerlinNoise2D;
 
-pub const MAP_SIZE: usize = 180;
+pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
 pub const QUADMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 4;
 pub const GRID_SIZE: usize = 13;
@@ -358,6 +358,12 @@ impl Map
 				}
 			}
 		}
+		{
+			self.cells[0][0].clear_terrain();
+			self.cells[GRID_SIZE - 1][0].clear_terrain();
+			self.cells[0][GRID_SIZE - 1].clear_terrain();
+			self.cells[GRID_SIZE - 1][GRID_SIZE - 1].clear_terrain();
+		}
 		for r in (1..(GRID_SIZE - 1)).step_by(2)
 		{
 			for c in 1..(GRID_SIZE - 1)
@@ -371,6 +377,13 @@ impl Map
 			{
 				self.merge_cell(r, c, rng);
 			}
+		}
+		for i in 0..GRID_SIZE
+		{
+			self.merge_cell(i, 0, rng);
+			self.merge_cell(i, GRID_SIZE - 1, rng);
+			self.merge_cell(0, i, rng);
+			self.merge_cell(GRID_SIZE - 1, i, rng);
 		}
 		for r in 0..GRID_SIZE
 		{
@@ -408,8 +421,8 @@ impl Map
 
 	pub fn draw(&self)
 	{
-		let x = -(GRID_CELL_SIZE as i32) / 2;
-		let y = x;
+		let x = 0;
+		let y = 0;
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.shade_bitmap,
@@ -471,10 +484,19 @@ impl Map
 		{
 			return;
 		}
-		let mut adjacents = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)];
+		let mut adjacents = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 		rng.shuffle(&mut adjacents);
-		for (rr, cc) in adjacents
+		for (dr, dc) in adjacents
 		{
+			if (r == 0 && dr < 0)
+				|| (c == 0 && dc < 0)
+				|| (r + 1 == GRID_SIZE && dr > 0)
+				|| (c + 1 == GRID_SIZE && dc > 0)
+			{
+				continue;
+			};
+			let rr = ((r as i32) + dr) as usize;
+			let cc = ((c as i32) + dc) as usize;
 			if self.cells[rr][cc].terrain_type() == tt
 			{
 				if self.cells[rr][cc].is_crucial()

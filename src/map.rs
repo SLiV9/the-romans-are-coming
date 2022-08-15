@@ -12,7 +12,7 @@ use perlin2d::PerlinNoise2D;
 pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
 pub const QUADMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 4;
-pub const GRID_SIZE: usize = 13;
+pub const GRID_SIZE: usize = 16;
 pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 
 const NOISE_OCTAVES: i32 = 5;
@@ -443,24 +443,24 @@ impl Map
 				}
 				else
 				{
-					//draw_on_bitmap(&mut self.ink_bitmap, x, y);
+					draw_on_bitmap(&mut self.ink_bitmap, x, y);
 				}
 			}
 		}
 		for r in 0..GRID_SIZE
 		{
-			for c in 0..2
+			for c in 0..4
 			{
 				let cell = &mut self.cells[r][c];
 				match cell.terrain_type()
 				{
-					Some(TerrainType::Mountain) | Some(TerrainType::Water) =>
+					Some(_) =>
 					{
-						()
+						cell.is_occupied = (c <= 2) || rng.bool();
 					}
-					_ =>
+					None =>
 					{
-						cell.is_occupied = (c == 0) || rng.bool();
+						cell.is_occupied = c <= 2;
 					}
 				}
 			}
@@ -482,7 +482,7 @@ impl Map
 				else
 				{
 					let (r, c, distance) =
-						self.closest_rc_to_xy(x as i32, y as i32);
+						self.closet_occupied_rc_to_xy(x as i32, y as i32);
 					if !self.cells[r][c].is_occupied
 					{
 						false
@@ -496,14 +496,14 @@ impl Map
 					{
 						true
 					}
-					else if distance < 4.0 + 10.0
+					else if distance < 4.0 + 10.0 && false
 					{
 						let noise = self
 							.occupation_noise
 							.as_ref()
 							.unwrap()
 							.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-						10.0 * (distance - 4.0 - 5.0) + noise < 0.0
+						5.0 * (distance - 4.0 - 5.0) + noise < 0.0
 					}
 					else
 					{
@@ -562,6 +562,27 @@ impl Map
 			MAP_SIZE as u32,
 			BLIT_1BPP,
 		);
+		unsafe { *DRAW_COLORS = 3 };
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let x0 = x + self.cells[r][c].centroid_x as i32;
+				let y0 = y + self.cells[r][c].centroid_y as i32;
+				if r > 0
+				{
+					let xx = x + self.cells[r - 1][c].centroid_x as i32;
+					let yy = y + self.cells[r - 1][c].centroid_y as i32;
+					line(x0, y0, xx, yy);
+				}
+				if c > 0
+				{
+					let xx = x + self.cells[r][c - 1].centroid_x as i32;
+					let yy = y + self.cells[r][c - 1].centroid_y as i32;
+					line(x0, y0, xx, yy);
+				}
+			}
+		}
 	}
 
 	fn closest_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
@@ -583,6 +604,39 @@ impl Map
 			.min_by_key(|(_r, _c, sqdis)| *sqdis)
 			.map(|(r, c, sqdis)| (r, c, (sqdis as f64).sqrt()))
 			.unwrap()
+	}
+
+	fn closet_occupied_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
+	{
+		let xx = std::cmp::max(0, x) as usize;
+		let yy = std::cmp::max(0, y) as usize;
+		let r0 = std::cmp::min(yy / GRID_CELL_SIZE, GRID_SIZE - 2);
+		let c0 = std::cmp::min(xx / GRID_CELL_SIZE, GRID_SIZE - 2);
+		if x == 20 && y >= 17 && y <= 20
+		{
+			trace(format!("{:?}", self.cells[r0][c0]));
+		}
+		if self.cells[r0][c0].is_occupied
+			&& self.cells[r0][c0 + 1].is_occupied
+			&& self.cells[r0 + 1][c0].is_occupied
+			&& self.cells[r0 + 1][c0 + 1].is_occupied
+		{
+			return (r0, c0, 0.0);
+		}
+		(0..4)
+			.map(|i| {
+				let r = r0 + 1 - i / 2;
+				let c = c0 + 1 - i % 2;
+				let cell = &self.cells[r][c];
+				let ddx = cell.centroid_x as i32 - x;
+				let ddy = cell.centroid_y as i32 - y;
+				let sqdis: i32 = ddx * ddx + ddy * ddy;
+				(r, c, sqdis)
+			})
+			.filter(|(r, c, _sqdis)| self.cells[*r][*c].is_occupied)
+			.min_by_key(|(_r, _c, sqdis)| *sqdis)
+			.map(|(r, c, sqdis)| (r, c, (sqdis as f64).sqrt()))
+			.unwrap_or((r0, c0, 1000.0))
 	}
 
 	fn merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)

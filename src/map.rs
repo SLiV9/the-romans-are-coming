@@ -46,7 +46,7 @@ impl Map
 	pub fn generate(&mut self, rng: &mut fastrand::Rng)
 	{
 		let noise_seed = rng.u16(..) as i32;
-		let noise = PerlinNoise2D::new(
+		let elevation = PerlinNoise2D::new(
 			NOISE_OCTAVES,
 			NOISE_AMPLITUDE,
 			NOISE_FREQUENCY,
@@ -56,12 +56,30 @@ impl Map
 			NOISE_BIAS,
 			noise_seed,
 		);
+		let culture = PerlinNoise2D::new(
+			NOISE_OCTAVES,
+			NOISE_AMPLITUDE,
+			10.0,
+			4.0,
+			NOISE_LACUNARITY,
+			NOISE_SCALE,
+			0.0,
+			noise_seed,
+		);
 		for y in 0..MAP_SIZE
 		{
 			for x in 0..MAP_SIZE
 			{
-				let elevation = noise.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				if elevation > 0.0
+				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				if e > 30.0
+				{
+					draw_on_bitmap(&mut self.bitmap, x, y);
+				}
+				else if e > 20.0
+				{
+					erase_on_bitmap(&mut self.bitmap, x, y);
+				}
+				else if e > 0.0
 				{
 					draw_on_bitmap(&mut self.bitmap, x, y);
 				}
@@ -69,7 +87,15 @@ impl Map
 				{
 					erase_on_bitmap(&mut self.bitmap, x, y);
 				}
-				erase_on_bitmap(&mut self.region_bitmap, x, y);
+				let c = culture.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				if c > 0.0
+				{
+					draw_on_bitmap(&mut self.region_bitmap, x, y);
+				}
+				else
+				{
+					erase_on_bitmap(&mut self.region_bitmap, x, y);
+				}
 				erase_on_bitmap(&mut self.centroid_bitmap, x, y);
 				let mut quad_value = 0;
 				if (x % GRID_CELL_SIZE) >= GRID_CELL_SIZE / 2
@@ -112,42 +138,42 @@ impl Map
 
 	pub fn draw(&self)
 	{
-		unsafe { *DRAW_COLORS = 0x2341 };
+		//unsafe { *DRAW_COLORS = 0x2341 };
+		//blit(
+		//	&self.hit_quadmap,
+		//	0,
+		//	0,
+		//	MAP_SIZE as u32,
+		//	MAP_SIZE as u32,
+		//	BLIT_2BPP,
+		//);
+		unsafe { *DRAW_COLORS = 0x04 };
 		blit(
-			&self.hit_quadmap,
+			&self.bitmap,
 			0,
 			0,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
-			BLIT_2BPP,
+			BLIT_1BPP,
 		);
-		//unsafe { *DRAW_COLORS = 0x04 };
-		//blit(
-		//	&self.bitmap,
-		//	0,
-		//	0,
-		//	MAP_SIZE as u32,
-		//	MAP_SIZE as u32,
-		//	BLIT_1BPP,
-		//);
-		//unsafe { *DRAW_COLORS = 0x20 };
-		//blit(
-		//	&self.region_bitmap,
-		//	0,
-		//	0,
-		//	MAP_SIZE as u32,
-		//	MAP_SIZE as u32,
-		//	BLIT_1BPP,
-		//);
-		//unsafe { *DRAW_COLORS = 0x30 };
-		//blit(
-		//	&self.centroid_bitmap,
-		//	0,
-		//	0,
-		//	MAP_SIZE as u32,
-		//	MAP_SIZE as u32,
-		//	BLIT_1BPP,
-		//);
+		unsafe { *DRAW_COLORS = 0x20 };
+		blit(
+			&self.region_bitmap,
+			0,
+			0,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP,
+		);
+		unsafe { *DRAW_COLORS = 0x30 };
+		blit(
+			&self.centroid_bitmap,
+			0,
+			0,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP,
+		);
 	}
 
 	fn fudge_grid_at_rc(

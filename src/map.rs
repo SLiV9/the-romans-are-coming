@@ -12,18 +12,18 @@ use perlin2d::PerlinNoise2D;
 pub const MAP_SIZE: usize = 180;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
 pub const QUADMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 4;
-pub const GRID_SIZE: usize = 9;
+pub const GRID_SIZE: usize = 7;
 pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 
-const NOISE_OCTAVES: i32 = 4;
+const NOISE_OCTAVES: i32 = 5;
 const NOISE_AMPLITUDE: f64 = 50.0;
-const NOISE_FREQUENCY: f64 = 3.0;
-const NOISE_FREQUENCY_FOREST: f64 = 5.0;
+const NOISE_FREQUENCY: f64 = 1.0;
+const NOISE_FREQUENCY_FOREST: f64 = 1.0;
 const NOISE_PERSISTENCE: f64 = 1.0;
 const NOISE_PERSISTENCE_FOREST: f64 = 2.0;
 const NOISE_LACUNARITY: f64 = 2.0;
 const NOISE_SCALE: (f64, f64) = (MAP_SIZE as f64, MAP_SIZE as f64);
-const NOISE_BIAS_ELEVATION: f64 = 40.0;
+const NOISE_BIAS_ELEVATION: f64 = 45.0;
 const NOISE_BIAS_FOREST: f64 = -20.0;
 
 const CENTROID_FIX_RADIUS: f64 = 3.0;
@@ -43,15 +43,17 @@ struct Cell
 {
 	centroid_x: u8,
 	centroid_y: u8,
-	elevation: i8,
-	forest: i8,
+	elevation: f32,
+	forest: f32,
+	size: u16,
 }
 
 const EMPTY_CELL: Cell = Cell {
 	centroid_x: 0,
 	centroid_y: 0,
-	elevation: 0,
-	forest: 0,
+	elevation: 0.0,
+	forest: 0.0,
+	size: 0,
 };
 
 impl Map
@@ -96,27 +98,12 @@ impl Map
 			for c in 0..GRID_SIZE
 			{
 				let cell = &mut self.cells[r][c];
-				let inner_x = 2 + rng.usize(0..(GRID_CELL_SIZE - 4));
-				let inner_y = 2 + rng.usize(0..(GRID_CELL_SIZE - 4));
-				let x = c * GRID_CELL_SIZE + inner_x;
-				let y = r * GRID_CELL_SIZE + inner_y;
-				let x = std::cmp::min(
-					std::cmp::max(GRID_CELL_SIZE / 2 + 1, x),
-					MAP_SIZE - 2 - GRID_CELL_SIZE / 2,
-				);
-				let y = std::cmp::min(
-					std::cmp::max(GRID_CELL_SIZE / 2 + 1, y),
-					MAP_SIZE - 2 - GRID_CELL_SIZE / 2,
-				);
+				let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
 				cell.centroid_x = x as u8;
 				cell.centroid_y = y as u8;
-				{
-					draw_on_bitmap(&mut self.centroid_bitmap, x, y);
-				}
-				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				cell.elevation = e as i32 as i8;
-				cell.forest = f as i32 as i8;
+				cell.elevation = 0.0;
+				cell.forest = 0.0;
+				cell.size = 0;
 			}
 		}
 		for y in 0..MAP_SIZE
@@ -125,25 +112,16 @@ impl Map
 			{
 				let (r, c, distance) =
 					self.closest_rc_to_xy(x as i32, y as i32);
-				let mut e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				let mut f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				if distance < CENTROID_FIX_RADIUS
-				{
-					e = self.cells[r][c].elevation as f64;
-					f = self.cells[r][c].forest as f64;
-				}
-				else if distance < CENTROID_SPREAD_RADIUS
-				{
-					let t = (distance - CENTROID_FIX_RADIUS)
-						/ (CENTROID_SPREAD_RADIUS - CENTROID_FIX_RADIUS);
-					e = t * e + (1.0 - t) * self.cells[r][c].elevation as f64;
-					f = t * f + (1.0 - t) * self.cells[r][c].forest as f64;
-				}
-				if e > 30.0
+				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				self.cells[r][c].elevation += e as f32;
+				self.cells[r][c].forest += f as f32;
+				self.cells[r][c].size += 1;
+				if e > 70.0
 				{
 					draw_on_bitmap(&mut self.bitmap, x, y);
 				}
-				else if e > 20.0
+				else if e > 50.0
 				{
 					erase_on_bitmap(&mut self.bitmap, x, y);
 				}
@@ -162,6 +140,44 @@ impl Map
 				else
 				{
 					erase_on_bitmap(&mut self.region_bitmap, x, y);
+				}
+			}
+		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let cell = &mut self.cells[r][c];
+				cell.elevation = cell.elevation / (cell.size as f32);
+				cell.forest = cell.forest / (cell.size as f32);
+				let x = cell.centroid_x as usize;
+				let y = cell.centroid_y as usize;
+				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let mut badness = (e as f32 - cell.elevation).abs()
+					+ (f as f32 - cell.forest).abs();
+				for _i in 0..10
+				{
+					if badness < 5.0
+					{
+						break;
+					}
+					let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
+					let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+					let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+					let b = (e as f32 - cell.elevation).abs()
+						+ (f as f32 - cell.forest).abs();
+					if b + 5.0 < badness
+					{
+						cell.centroid_x = x as u8;
+						cell.centroid_y = y as u8;
+						badness = b;
+					}
+				}
+				{
+					let x = cell.centroid_x as usize;
+					let y = cell.centroid_y as usize;
+					draw_on_bitmap(&mut self.centroid_bitmap, x, y);
 				}
 			}
 		}
@@ -254,4 +270,26 @@ fn draw_on_quadmap(
 	quadmap[byte_offset] &= !(0b11000000 >> bit_shift);
 	let value = value & 0b11;
 	quadmap[byte_offset] |= (value << 6) >> bit_shift;
+}
+
+fn pick_random_centroid_xy_at_rc(
+	r: usize,
+	c: usize,
+	rng: &mut fastrand::Rng,
+) -> (usize, usize)
+{
+	let padding = 3;
+	let inner_x = padding + rng.usize(0..(GRID_CELL_SIZE - 2 * padding));
+	let inner_y = padding + rng.usize(0..(GRID_CELL_SIZE - 2 * padding));
+	let x = c * GRID_CELL_SIZE + inner_x;
+	let y = r * GRID_CELL_SIZE + inner_y;
+	let x = std::cmp::min(
+		std::cmp::max(GRID_CELL_SIZE / 2 + padding, x),
+		MAP_SIZE - 1 - padding - GRID_CELL_SIZE / 2,
+	);
+	let y = std::cmp::min(
+		std::cmp::max(GRID_CELL_SIZE / 2 + padding, y),
+		MAP_SIZE - 1 - padding - GRID_CELL_SIZE / 2,
+	);
+	(x, y)
 }

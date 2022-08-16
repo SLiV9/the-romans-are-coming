@@ -209,14 +209,16 @@ impl Map
 				cell.realize_terrain();
 			}
 		}
+
+		for i in 1..GRID_SIZE
 		{
-			self.cells[0][0].contents = Contents::Culled { is_occupied: false };
-			self.cells[GRID_SIZE - 1][0].contents =
+			self.cells[0][i - 1].contents =
 				Contents::Culled { is_occupied: false };
-			self.cells[0][GRID_SIZE - 1].contents =
+			self.cells[i - 1][GRID_SIZE - 1].contents =
 				Contents::Culled { is_occupied: false };
-			self.cells[GRID_SIZE - 1][GRID_SIZE - 1].contents =
+			self.cells[GRID_SIZE - 1][i].contents =
 				Contents::Culled { is_occupied: false };
+			self.cells[i][0].contents = Contents::Culled { is_occupied: false };
 		}
 		for r in 1..(GRID_SIZE - 1)
 		{
@@ -241,13 +243,6 @@ impl Map
 			{
 				self.merge_cell(r, c, rng);
 			}
-		}
-		for i in 0..GRID_SIZE
-		{
-			self.merge_cell(i, 0, rng);
-			self.merge_cell(i, GRID_SIZE - 1, rng);
-			self.merge_cell(0, i, rng);
-			self.merge_cell(GRID_SIZE - 1, i, rng);
 		}
 		for r in 0..GRID_SIZE
 		{

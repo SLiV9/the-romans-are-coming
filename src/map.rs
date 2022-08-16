@@ -58,91 +58,6 @@ enum TerrainType
 	Water,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-struct Cell
-{
-	centroid_x: u8,
-	centroid_y: u8,
-	n_water: u8,
-	n_mountain: u8,
-	n_hill: u8,
-	n_forest: u8,
-	n_grass: u8,
-	is_occupied: bool,
-}
-
-const EMPTY_CELL: Cell = Cell {
-	centroid_x: 0,
-	centroid_y: 0,
-	n_water: 0,
-	n_mountain: 0,
-	n_hill: 0,
-	n_forest: 0,
-	n_grass: 0,
-	is_occupied: false,
-};
-
-impl Cell
-{
-	fn terrain_type(&self) -> Option<TerrainType>
-	{
-		if self.n_water > 0
-		{
-			Some(TerrainType::Water)
-		}
-		else if self.n_mountain > 0
-		{
-			Some(TerrainType::Mountain)
-		}
-		else if self.n_hill > 0
-		{
-			Some(TerrainType::Hill)
-		}
-		else if self.n_forest > 0
-		{
-			Some(TerrainType::Forest)
-		}
-		else if self.n_grass > 0
-		{
-			Some(TerrainType::Grass)
-		}
-		else
-		{
-			None
-		}
-	}
-
-	fn clear_terrain(&mut self)
-	{
-		self.n_water = 0;
-		self.n_mountain = 0;
-		self.n_hill = 0;
-		self.n_forest = 0;
-		self.n_grass = 0;
-	}
-
-	fn make_more_important(&mut self)
-	{
-		if !self.is_crucial()
-		{
-			self.n_water *= 2;
-			self.n_mountain *= 2;
-			self.n_hill *= 2;
-			self.n_forest *= 2;
-			self.n_grass *= 2;
-		}
-	}
-
-	fn is_crucial(&self) -> bool
-	{
-		self.n_water >= 8
-			|| self.n_mountain >= 8
-			|| self.n_hill >= 8
-			|| self.n_forest >= 8
-			|| self.n_grass >= 8
-	}
-}
-
 impl Map
 {
 	pub const fn empty() -> Self
@@ -201,7 +116,13 @@ impl Map
 				let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
 				cell.centroid_x = x as u8;
 				cell.centroid_y = y as u8;
-				cell.clear_terrain();
+				cell.contents = Contents::Tally {
+					n_water: 0,
+					n_mountain: 0,
+					n_hill: 0,
+					n_forest: 0,
+					n_grass: 0,
+				};
 			}
 		}
 		for y in 0..MAP_SIZE
@@ -279,45 +200,7 @@ impl Map
 				{
 					erase_on_bitmap(&mut self.debug_bitmap, x, y);
 				}
-				let cell = &mut self.cells[r][c];
-				match terrain_type
-				{
-					TerrainType::Grass =>
-					{
-						if cell.n_grass < 250
-						{
-							cell.n_grass += 1;
-						}
-					}
-					TerrainType::Forest =>
-					{
-						if cell.n_forest < 250
-						{
-							cell.n_forest += 1;
-						}
-					}
-					TerrainType::Hill =>
-					{
-						if cell.n_hill < 250
-						{
-							cell.n_hill += 1;
-						}
-					}
-					TerrainType::Mountain =>
-					{
-						if cell.n_mountain < 250
-						{
-							cell.n_mountain += 1;
-						}
-					}
-					TerrainType::Water =>
-					{
-						if cell.n_water < 250
-						{
-							cell.n_water += 1;
-						}
-					}
-				}
+				self.cells[r][c].add_tally(terrain_type);
 			}
 		}
 		for r in 0..GRID_SIZE
@@ -325,86 +208,17 @@ impl Map
 			for c in 0..GRID_SIZE
 			{
 				let cell = &mut self.cells[r][c];
-				let n_total = (cell.n_water as u16)
-					+ (cell.n_mountain as u16)
-					+ (cell.n_hill as u16)
-					+ (cell.n_forest as u16)
-					+ (cell.n_grass as u16);
-				let n_total = std::cmp::min(n_total, 250) as u8;
-				let mut te = 0.0;
-				let mut tf = 0.0;
-				let terrain_type = if cell.n_water > n_total / 2
-				{
-					te = -100.0;
-					TerrainType::Water
-				}
-				else if cell.n_mountain > n_total / 2
-				{
-					te = 1000.0;
-					TerrainType::Mountain
-				}
-				else if cell.n_hill > n_total / 2
-				{
-					te = ELEVATION_THRESHOLD_HILL + 10.0;
-					tf = -200.0;
-					TerrainType::Hill
-				}
-				else if cell.n_forest > n_total / 2
-				{
-					te = 20.0;
-					tf = 400.0;
-					TerrainType::Forest
-				}
-				else if cell.n_grass > n_total / 2
-				{
-					te = 10.0;
-					tf = -200.0;
-					TerrainType::Grass
-				}
-				else
-				{
-					// This is a bad cell.
-					cell.clear_terrain();
-					continue;
-				};
-				let x = cell.centroid_x as usize;
-				let y = cell.centroid_y as usize;
-				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-				let mut badness = (te - e).abs() + (tf - f).abs();
-				for _i in 0..50
-				{
-					if badness < 2.0
-					{
-						break;
-					}
-					let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
-					let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-					let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-					let b = (te - e).abs() + (tf - f).abs();
-					if b + 1.0 < badness
-					{
-						cell.centroid_x = x as u8;
-						cell.centroid_y = y as u8;
-						badness = b;
-					}
-				}
-				cell.clear_terrain();
-				match terrain_type
-				{
-					TerrainType::Grass => cell.n_grass = 1,
-					TerrainType::Forest => cell.n_forest = 1,
-					TerrainType::Hill => cell.n_hill = 1,
-					TerrainType::Mountain => cell.n_mountain = 1,
-					TerrainType::Water => cell.n_water = 1,
-				}
+				cell.realize_terrain();
 			}
 		}
 		{
-			self.cells[0][0].clear_terrain();
-			self.cells[GRID_SIZE - 1][0].clear_terrain();
-			self.cells[0][GRID_SIZE - 1].clear_terrain();
-			self.cells[GRID_SIZE - 1][GRID_SIZE - 1].clear_terrain();
+			self.cells[0][0].contents = Contents::Culled { is_occupied: false };
+			self.cells[GRID_SIZE - 1][0].contents =
+				Contents::Culled { is_occupied: false };
+			self.cells[0][GRID_SIZE - 1].contents =
+				Contents::Culled { is_occupied: false };
+			self.cells[GRID_SIZE - 1][GRID_SIZE - 1].contents =
+				Contents::Culled { is_occupied: false };
 		}
 		for r in 1..(GRID_SIZE - 1)
 		{
@@ -441,19 +255,68 @@ impl Map
 		{
 			for c in 0..GRID_SIZE
 			{
+				let cell = &mut self.cells[r][c];
+				let (te, tf) = match cell.terrain_type()
+				{
+					Some(TerrainType::Water) => (-100.0, 0.0),
+					Some(TerrainType::Mountain) => (1000.0, 0.0),
+					Some(TerrainType::Hill) =>
+					{
+						(ELEVATION_THRESHOLD_HILL + 10.0, -200.0)
+					}
+					Some(TerrainType::Forest) => (20.0, 400.0),
+					Some(TerrainType::Grass) => (10.0, -200.0),
+					None =>
+					{
+						// This is a bad cell.
+						continue;
+					}
+				};
+				let x = cell.centroid_x as usize;
+				let y = cell.centroid_y as usize;
+				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let mut badness = (te - e).abs() + (tf - f).abs();
+				for _i in 0..50
+				{
+					if badness < 2.0
+					{
+						break;
+					}
+					let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
+					let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+					let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+					let b = (te - e).abs() + (tf - f).abs();
+					if b + 1.0 < badness
+					{
+						cell.centroid_x = x as u8;
+						cell.centroid_y = y as u8;
+						badness = b;
+					}
+				}
+			}
+		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
 				let cell = &self.cells[r][c];
 				let x = cell.centroid_x as usize;
 				let y = cell.centroid_y as usize;
-				if cell.terrain_type().is_some() && cell.n_water == 0
+				match cell.terrain_type()
 				{
-					draw_on_bitmap(&mut self.ink_bitmap, x, y);
-					draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
-					draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
-					draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
-				}
-				else if false
-				{
-					draw_on_bitmap(&mut self.ink_bitmap, x, y);
+					Some(TerrainType::Water) => (),
+					Some(_) =>
+					{
+						draw_on_bitmap(&mut self.ink_bitmap, x, y);
+						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
+						draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
+						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
+					}
+					None =>
+					{
+						//draw_on_bitmap(&mut self.ink_bitmap, x, y);
+					}
 				}
 			}
 		}
@@ -466,11 +329,17 @@ impl Map
 				{
 					Some(_) =>
 					{
-						cell.is_occupied = (c <= 2) || rng.bool();
+						if (c <= 2) || rng.bool()
+						{
+							cell.become_occupied();
+						}
 					}
 					None =>
 					{
-						cell.is_occupied = c <= 2;
+						if c <= 2
+						{
+							cell.become_occupied();
+						}
 					}
 				}
 			}
@@ -493,7 +362,7 @@ impl Map
 				{
 					let (r, c, distance) =
 						self.closest_occupied_rc_to_xy(x as i32, y as i32);
-					if !self.cells[r][c].is_occupied
+					if !self.cells[r][c].is_occupied()
 					{
 						false
 					}
@@ -709,10 +578,10 @@ impl Map
 	fn closest_occupied_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
 	{
 		let (r0, c0) = self.r0_c0_for_xy(x, y);
-		if self.cells[r0][c0].is_occupied
-			&& self.cells[r0][c0 + 1].is_occupied
-			&& self.cells[r0 + 1][c0].is_occupied
-			&& self.cells[r0 + 1][c0 + 1].is_occupied
+		if self.cells[r0][c0].is_occupied()
+			&& self.cells[r0][c0 + 1].is_occupied()
+			&& self.cells[r0 + 1][c0].is_occupied()
+			&& self.cells[r0 + 1][c0 + 1].is_occupied()
 		{
 			return (r0, c0, 0.0);
 		}
@@ -727,11 +596,11 @@ impl Map
 				(r, c, sqdis)
 			})
 			.filter(|(r, c, sqdis)| {
-				self.cells[*r][*c].is_occupied || *sqdis < 4 * 4
+				self.cells[*r][*c].is_occupied() || *sqdis < 4 * 4
 			})
 			.min_by_key(|(_r, _c, sqdis)| *sqdis)
 			.map(|(r, c, sqdis)| {
-				if self.cells[r][c].is_occupied
+				if self.cells[r][c].is_occupied()
 				{
 					(r, c, (sqdis as f64).sqrt())
 				}
@@ -771,20 +640,246 @@ impl Map
 			{
 				if self.cells[rr][cc].is_crucial()
 				{
-					self.cells[r][c].clear_terrain();
+					self.cells[r][c].contents = Contents::Merged {
+						parent_row: rr as u8,
+						parent_col: cc as u8,
+						is_occupied: false,
+					};
 				}
 				else if rng.bool()
 				{
-					self.cells[rr][cc].clear_terrain();
+					self.cells[rr][cc].contents = Contents::Merged {
+						parent_row: r as u8,
+						parent_col: c as u8,
+						is_occupied: false,
+					};
 					self.cells[r][c].make_more_important();
 				}
 				else
 				{
-					self.cells[r][c].clear_terrain();
+					self.cells[r][c].contents = Contents::Merged {
+						parent_row: rr as u8,
+						parent_col: cc as u8,
+						is_occupied: false,
+					};
 					self.cells[rr][cc].make_more_important();
 				}
 				break;
 			}
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Contents
+{
+	Empty,
+	Tally
+	{
+		n_water: u8,
+		n_mountain: u8,
+		n_hill: u8,
+		n_forest: u8,
+		n_grass: u8,
+	},
+	Terrain
+	{
+		terrain_type: TerrainType,
+		is_occupied: bool,
+		merge_importance: u8,
+	},
+	Merged
+	{
+		parent_row: u8,
+		parent_col: u8,
+		is_occupied: bool,
+	},
+	Culled
+	{
+		is_occupied: bool,
+	},
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Cell
+{
+	centroid_x: u8,
+	centroid_y: u8,
+	contents: Contents,
+}
+
+const EMPTY_CELL: Cell = Cell {
+	centroid_x: 0,
+	centroid_y: 0,
+	contents: Contents::Empty,
+};
+
+impl Cell
+{
+	fn terrain_type(&self) -> Option<TerrainType>
+	{
+		match self.contents
+		{
+			Contents::Terrain { terrain_type, .. } => Some(terrain_type),
+			_ => None,
+		}
+	}
+
+	fn is_occupied(&self) -> bool
+	{
+		match self.contents
+		{
+			Contents::Terrain { is_occupied, .. } => is_occupied,
+			Contents::Merged { is_occupied, .. } => is_occupied,
+			Contents::Culled { is_occupied, .. } => is_occupied,
+			_ => false,
+		}
+	}
+
+	fn become_occupied(&mut self)
+	{
+		match &mut self.contents
+		{
+			Contents::Terrain { is_occupied, .. } => *is_occupied = true,
+			Contents::Merged { is_occupied, .. } => *is_occupied = true,
+			Contents::Culled { is_occupied, .. } => *is_occupied = true,
+			_ => unreachable!(),
+		}
+	}
+
+	fn make_more_important(&mut self)
+	{
+		match &mut self.contents
+		{
+			Contents::Terrain {
+				merge_importance, ..
+			} =>
+			{
+				*merge_importance += 1;
+			}
+			_ => unreachable!(),
+		}
+	}
+
+	fn is_crucial(&self) -> bool
+	{
+		match self.contents
+		{
+			Contents::Terrain {
+				merge_importance, ..
+			} => merge_importance >= 3,
+			_ => false,
+		}
+	}
+
+	fn add_tally(&mut self, terrain_type: TerrainType)
+	{
+		match &mut self.contents
+		{
+			Contents::Tally {
+				n_water,
+				n_mountain,
+				n_hill,
+				n_forest,
+				n_grass,
+			} => match terrain_type
+			{
+				TerrainType::Grass =>
+				{
+					if *n_grass < 250
+					{
+						*n_grass += 1;
+					}
+				}
+				TerrainType::Forest =>
+				{
+					if *n_forest < 250
+					{
+						*n_forest += 1;
+					}
+				}
+				TerrainType::Hill =>
+				{
+					if *n_hill < 250
+					{
+						*n_hill += 1;
+					}
+				}
+				TerrainType::Mountain =>
+				{
+					if *n_mountain < 250
+					{
+						*n_mountain += 1;
+					}
+				}
+				TerrainType::Water =>
+				{
+					if *n_water < 250
+					{
+						*n_water += 1;
+					}
+				}
+			},
+			_ => unreachable!(),
+		}
+	}
+
+	fn realize_terrain(&mut self)
+	{
+		let terrain_type = match self.contents
+		{
+			Contents::Tally {
+				n_water,
+				n_mountain,
+				n_hill,
+				n_forest,
+				n_grass,
+			} =>
+			{
+				let n_total = (n_water as u16)
+					+ (n_mountain as u16)
+					+ (n_hill as u16) + (n_forest as u16)
+					+ (n_grass as u16);
+				let n_total = std::cmp::min(n_total, 250) as u8;
+				if n_water > n_total / 2
+				{
+					Some(TerrainType::Water)
+				}
+				else if n_mountain > n_total / 2
+				{
+					Some(TerrainType::Mountain)
+				}
+				else if n_hill > n_total / 2
+				{
+					Some(TerrainType::Hill)
+				}
+				else if n_forest > n_total / 2
+				{
+					Some(TerrainType::Forest)
+				}
+				else if n_grass > n_total / 2
+				{
+					Some(TerrainType::Grass)
+				}
+				else
+				{
+					None
+				}
+			}
+			_ => unreachable!(),
+		};
+
+		if let Some(terrain_type) = terrain_type
+		{
+			self.contents = Contents::Terrain {
+				terrain_type,
+				is_occupied: false,
+				merge_importance: 0,
+			}
+		}
+		else
+		{
+			self.contents = Contents::Culled { is_occupied: false };
 		}
 	}
 }

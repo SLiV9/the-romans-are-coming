@@ -13,12 +13,14 @@ use perlin2d::PerlinNoise2D;
 
 pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
-pub const QUADMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 4;
 pub const GRID_SIZE: usize = 16;
 pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 pub const PROP_GRID_SIZE: usize = 40;
 pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
 pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
+
+const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
+const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 40;
 
 const NOISE_OCTAVES: i32 = 5;
 const NOISE_AMPLITUDE: f64 = 50.0;
@@ -209,16 +211,12 @@ impl Map
 				cell.realize_terrain();
 			}
 		}
-
-		for i in 1..GRID_SIZE
+		for i in 0..GRID_SIZE
 		{
-			self.cells[0][i - 1].contents =
-				Contents::Culled { is_occupied: false };
-			self.cells[i - 1][GRID_SIZE - 1].contents =
-				Contents::Culled { is_occupied: false };
-			self.cells[GRID_SIZE - 1][i].contents =
-				Contents::Culled { is_occupied: false };
-			self.cells[i][0].contents = Contents::Culled { is_occupied: false };
+			self.force_merge_edge(i, 0, rng);
+			self.force_merge_edge(i, GRID_SIZE - 1, rng);
+			self.force_merge_edge(0, i, rng);
+			self.force_merge_edge(GRID_SIZE - 1, i, rng);
 		}
 		for r in 1..(GRID_SIZE - 1)
 		{
@@ -226,7 +224,7 @@ impl Map
 			{
 				if (r + c) % 2 == 0
 				{
-					self.merge_cell(r, c, rng);
+					self.soft_merge_cell(r, c, rng);
 				}
 			}
 		}
@@ -234,14 +232,87 @@ impl Map
 		{
 			for c in 1..(GRID_SIZE - 1)
 			{
-				self.merge_cell(r, c, rng);
+				self.soft_merge_cell(r, c, rng);
 			}
 		}
 		for r in (2..(GRID_SIZE - 2)).step_by(2)
 		{
 			for c in (1..(GRID_SIZE - 1)).step_by(2)
 			{
-				self.merge_cell(r, c, rng);
+				self.soft_merge_cell(r, c, rng);
+			}
+		}
+		let mut cell_goodness = [0i8; GRID_SIZE * GRID_SIZE];
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let cell = &self.cells[r][c];
+				match cell.contents
+				{
+					Contents::Terrain { terrain_type, .. } =>
+					{
+						let mut num_too_close: usize = 0;
+						let mut num_close_similar: usize = 0;
+						let mut num_close_different: usize = 0;
+						for dr in -4..=4
+						{
+							for dc in -4..=4
+							{
+								if dr == 0 && dc == 0
+								{
+									continue;
+								}
+								let rr = r as i32 + dr;
+								let cc = c as i32 + dc;
+								if rr < 0
+									|| cc < 0 || (rr as usize > GRID_SIZE - 1)
+									|| (cc as usize > GRID_SIZE - 1)
+								{
+									continue;
+								}
+								let rr = rr as usize;
+								let cc = cc as usize;
+								let other = &self.cells[rr][cc];
+								match cell.contents
+								{
+									Contents::Terrain { .. } => (),
+									_ => continue,
+								}
+								let dx = (cell.centroid_x as i32)
+									- (other.centroid_x as i32);
+								let dy = (cell.centroid_y as i32)
+									- (other.centroid_y as i32);
+								if dx * dx + dy * dy
+									> MAX_DISTANCE_BETWEEN_REGIONS
+										* MAX_DISTANCE_BETWEEN_REGIONS
+								{
+									continue;
+								}
+								if dx * dx + dy * dy
+									< MIN_DISTANCE_BETWEEN_REGIONS
+										* MIN_DISTANCE_BETWEEN_REGIONS
+								{
+									num_too_close += 1;
+								}
+								if other.terrain_type() == Some(terrain_type)
+								{
+									num_close_similar += 1;
+								}
+								else
+								{
+									num_close_different += 1;
+								}
+							}
+						}
+						let goodness: i8 = 1
+							+ (std::cmp::min(num_close_different, 9) as i8)
+							- (std::cmp::min(num_close_similar, 9) as i8)
+							- 10 * (std::cmp::min(num_too_close, 10) as i8);
+						cell_goodness[r * GRID_SIZE + c] = goodness;
+					}
+					_ => (),
+				}
 			}
 		}
 		for r in 0..GRID_SIZE
@@ -261,7 +332,8 @@ impl Map
 					Some(TerrainType::Grass) => (10.0, -200.0),
 					None =>
 					{
-						// This is a bad cell.
+						// This is not clickable terrain so the center does
+						// not really matter.
 						continue;
 					}
 				};
@@ -702,7 +774,7 @@ impl Map
 			.unwrap_or((r0, c0, 1000.0))
 	}
 
-	fn merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
+	fn soft_merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
 		let tt = self.cells[r][c].terrain_type();
 		if tt.is_none()
@@ -758,6 +830,48 @@ impl Map
 			}
 		}
 	}
+
+	fn force_merge_edge(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
+	{
+		let tt = self.cells[r][c].terrain_type();
+		if tt.is_none()
+		{
+			return;
+		}
+		else if self.cells[r][c].is_crucial()
+		{
+			return;
+		}
+		let mut adjacents = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+		rng.shuffle(&mut adjacents);
+		for (dr, dc) in adjacents
+		{
+			if (r == 0 && dr < 0)
+				|| (c == 0 && dc < 0)
+				|| (r + 1 == GRID_SIZE && dr > 0)
+				|| (c + 1 == GRID_SIZE && dc > 0)
+			{
+				continue;
+			};
+			let rr = ((r as i32) + dr) as usize;
+			let cc = ((c as i32) + dc) as usize;
+			if (rr == 0 || rr == GRID_SIZE - 1)
+				&& (cc == 0 || cc == GRID_SIZE - 1)
+			{
+				continue;
+			}
+			if self.cells[rr][cc].terrain_type() == tt
+			{
+				self.cells[r][c].contents = Contents::Merged {
+					parent_row: rr as u8,
+					parent_col: cc as u8,
+					is_occupied: false,
+				};
+				self.cells[rr][cc].make_more_important();
+				break;
+			}
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -775,6 +889,7 @@ enum Contents
 	Terrain
 	{
 		terrain_type: TerrainType,
+		is_clickable: bool,
 		is_occupied: bool,
 		merge_importance: u8,
 	},
@@ -963,6 +1078,7 @@ impl Cell
 		{
 			self.contents = Contents::Terrain {
 				terrain_type,
+				is_clickable: false,
 				is_occupied: false,
 				merge_importance: 0,
 			}
@@ -996,22 +1112,6 @@ fn is_on_bitmap(bitmap: &[u8; BITMAP_SIZE], x: usize, y: usize) -> bool
 	let byte_offset = offset / 8;
 	let bit_shift = offset % 8;
 	bitmap[byte_offset] & (0b10000000 >> bit_shift) > 0
-}
-
-fn draw_on_quadmap(
-	quadmap: &mut [u8; QUADMAP_SIZE],
-	x: usize,
-	y: usize,
-	value: u8,
-)
-{
-	let offset = y * MAP_SIZE + x;
-	let byte_offset = offset / 4;
-	assert!(byte_offset < QUADMAP_SIZE);
-	let bit_shift = 2 * (offset % 4);
-	quadmap[byte_offset] &= !(0b11000000 >> bit_shift);
-	let value = value & 0b11;
-	quadmap[byte_offset] |= (value << 6) >> bit_shift;
 }
 
 fn set_on_propmap(

@@ -1132,7 +1132,6 @@ fn set_on_propmap(
 	};
 	let offset = v * PROP_GRID_SIZE + u;
 	let byte_offset = offset / 2;
-	assert!(byte_offset < PROPMAP_SIZE);
 	let bit_shift = 4 * (offset % 2);
 	propmap[byte_offset] &= !(0b11110000 >> bit_shift);
 	let value = value & 0b1111;
@@ -1147,7 +1146,6 @@ fn get_from_propmap(
 {
 	let offset = v * PROP_GRID_SIZE + u;
 	let byte_offset = offset / 2;
-	assert!(byte_offset < PROPMAP_SIZE);
 	let bit_shift = 4 - 4 * (offset % 2);
 	let value = (propmap[byte_offset] >> bit_shift) & 0b1111;
 	match value

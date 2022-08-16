@@ -16,6 +16,9 @@ pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
 pub const QUADMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 4;
 pub const GRID_SIZE: usize = 16;
 pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
+pub const PROP_GRID_SIZE: usize = 40;
+pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
+pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
 
 const NOISE_OCTAVES: i32 = 5;
 const NOISE_AMPLITUDE: f64 = 50.0;
@@ -44,6 +47,7 @@ pub struct Map
 	debug_bitmap: [u8; BITMAP_SIZE],
 	ink_bitmap: [u8; BITMAP_SIZE],
 	occupation_bitmap: [u8; BITMAP_SIZE],
+	propmap: [u8; PROPMAP_SIZE],
 	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
 	occupation_noise: Option<PerlinNoise2D>,
 }
@@ -68,6 +72,7 @@ impl Map
 			debug_bitmap: [0; BITMAP_SIZE],
 			ink_bitmap: [0; BITMAP_SIZE],
 			occupation_bitmap: [0; BITMAP_SIZE],
+			propmap: [0; PROPMAP_SIZE],
 			cells: [[EMPTY_CELL; GRID_SIZE]; GRID_SIZE],
 			occupation_noise: None,
 		}
@@ -174,25 +179,18 @@ impl Map
 				if terrain_type == TerrainType::Mountain
 				{
 					draw_on_bitmap(&mut self.mountain_bitmap, x, y);
-					if (x + y) % 2 == 0
-					{
-						draw_on_bitmap(&mut self.debug_bitmap, x, y);
-					}
-					else
-					{
-						erase_on_bitmap(&mut self.debug_bitmap, x, y);
-					}
 				}
 				else
 				{
 					erase_on_bitmap(&mut self.mountain_bitmap, x, y);
-					erase_on_bitmap(&mut self.debug_bitmap, x, y);
 				}
 				if (terrain_type == TerrainType::Forest
 					&& ((x + y) % 2 == 0)
 					&& (x % 4 == 0) && (y % 4 == 0))
 					|| (terrain_type == TerrainType::Hill
 						&& ((x + y) % 2 == 0) && (x % 4 == 0 || y % 4 == 0))
+					|| (terrain_type == TerrainType::Mountain
+						&& ((x + y) % 2 == 0))
 				{
 					draw_on_bitmap(&mut self.debug_bitmap, x, y);
 				}
@@ -277,7 +275,11 @@ impl Map
 				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 				let mut badness = (te - e).abs() + (tf - f).abs();
-				for _i in 0..50
+				if (te > 0.0 && e < 2.0) || (te < 0.0 && e > -2.0)
+				{
+					badness += 1000.0;
+				}
+				for _i in 0..100
 				{
 					if badness < 2.0
 					{
@@ -286,7 +288,11 @@ impl Map
 					let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
 					let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 					let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-					let b = (te - e).abs() + (tf - f).abs();
+					let mut b = (te - e).abs() + (tf - f).abs();
+					if (te > 0.0 && e < 2.0) || (te < 0.0 && e > -2.0)
+					{
+						b += 1000.0;
+					}
 					if b + 1.0 < badness
 					{
 						cell.centroid_x = x as u8;
@@ -317,6 +323,93 @@ impl Map
 					{
 						//draw_on_bitmap(&mut self.ink_bitmap, x, y);
 					}
+				}
+			}
+		}
+		for v in 0..PROP_GRID_SIZE
+		{
+			for u in 0..PROP_GRID_SIZE
+			{
+				let x = PROP_GRID_CELL_SIZE * u;
+				let y = PROP_GRID_CELL_SIZE * v;
+				let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+				let terrain_type = if e > ELEVATION_THRESHOLD_MOUNTAIN
+				{
+					if (u + v) % 2 == 0
+					{
+						Some(TerrainType::Mountain)
+					}
+					else
+					{
+						None
+					}
+				}
+				else if e > ELEVATION_THRESHOLD_HILL
+				{
+					if f > FOREST_THRESHOLD_ON_HILL
+					{
+						Some(TerrainType::Forest)
+					}
+					else if (u + v) % 2 == 0
+					{
+						Some(TerrainType::Hill)
+					}
+					else
+					{
+						None
+					}
+				}
+				else if e > ELEVATION_THRESHOLD_WATER + 5.0
+				{
+					if f > FOREST_THRESHOLD_ON_GRASS
+					{
+						Some(TerrainType::Forest)
+					}
+					else
+					{
+						Some(TerrainType::Grass)
+					}
+				}
+				else
+				{
+					None
+				};
+				set_on_propmap(&mut self.propmap, u, v, terrain_type);
+			}
+		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let cell = &mut self.cells[r][c];
+				match cell.contents
+				{
+					Contents::Terrain { .. } =>
+					{
+						let x = cell.centroid_x as usize;
+						let y = cell.centroid_y as usize;
+						let u = x / PROP_GRID_CELL_SIZE;
+						let v = y / PROP_GRID_CELL_SIZE;
+						for (dv, dus) in [(0, -1..=1), (1, -2..=2), (2, -1..=1)]
+						{
+							for du in dus
+							{
+								let uu = (u as i32 + du) as usize;
+								let vv = (v as i32 + dv) as usize;
+								if uu < PROP_GRID_SIZE && vv < PROP_GRID_SIZE
+								{
+									set_on_propmap(
+										&mut self.propmap,
+										uu,
+										vv,
+										None,
+									);
+								}
+							}
+						}
+					}
+					_ => (),
 				}
 			}
 		}
@@ -415,7 +508,7 @@ impl Map
 	{
 		let map_x = 0;
 		let map_y = 5;
-		unsafe { *DRAW_COLORS = 0x20 };
+		unsafe { *DRAW_COLORS = 0x00 };
 		blit(
 			&self.debug_bitmap,
 			map_x,
@@ -492,37 +585,35 @@ impl Map
 							((2 * r + 3 * c) % 17) as u8,
 						);
 					}
+					_ => (),
+				}
+			}
+		}
+		for v in 0..PROP_GRID_SIZE
+		{
+			for u in 0..PROP_GRID_SIZE
+			{
+				let x = map_x + (u * PROP_GRID_CELL_SIZE) as i32;
+				let y =
+					map_y + (v * PROP_GRID_CELL_SIZE) as i32 + (u % 2) as i32;
+				let alt = ((2 * u + 3 * v) % 17) as u8;
+				match get_from_propmap(&self.propmap, u, v)
+				{
 					Some(TerrainType::Mountain) =>
 					{
-						sprites::draw_mountain(
-							map_x + (cell.centroid_x as i32) - 1,
-							map_y + (cell.centroid_y as i32) + 1,
-							((2 * r + 3 * c) % 17) as u8,
-						);
+						sprites::draw_mountain(x, y + 4, alt);
 					}
 					Some(TerrainType::Hill) =>
 					{
-						sprites::draw_hill(
-							map_x + (cell.centroid_x as i32) - 1,
-							map_y + (cell.centroid_y as i32) - 2,
-							((2 * r + 3 * c) % 17) as u8,
-						);
+						sprites::draw_hill(x, y, alt);
 					}
 					Some(TerrainType::Forest) =>
 					{
-						sprites::draw_tree(
-							map_x + (cell.centroid_x as i32) - 2,
-							map_y + (cell.centroid_y as i32),
-							((2 * r + 3 * c) % 17) as u8,
-						);
+						sprites::draw_tree(x - 1, y, alt);
 					}
 					Some(TerrainType::Grass) =>
 					{
-						sprites::draw_grass(
-							map_x + (cell.centroid_x as i32) - 4,
-							map_y + (cell.centroid_y as i32),
-							((2 * r + 3 * c) % 17) as u8,
-						);
+						//sprites::draw_grass(x, y, alt);
 					}
 					_ => (),
 				}
@@ -841,7 +932,7 @@ impl Cell
 					+ (n_hill as u16) + (n_forest as u16)
 					+ (n_grass as u16);
 				let n_total = std::cmp::min(n_total, 250) as u8;
-				if n_water > n_total / 2
+				if n_water > (3 * (n_total as u16) / 4) as u8
 				{
 					Some(TerrainType::Water)
 				}
@@ -888,7 +979,6 @@ fn draw_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], x: usize, y: usize)
 {
 	let offset = y * MAP_SIZE + x;
 	let byte_offset = offset / 8;
-	assert!(byte_offset < BITMAP_SIZE);
 	let bit_shift = offset % 8;
 	bitmap[byte_offset] |= 0b10000000 >> bit_shift;
 }
@@ -897,7 +987,6 @@ fn erase_on_bitmap(bitmap: &mut [u8; BITMAP_SIZE], x: usize, y: usize)
 {
 	let offset = y * MAP_SIZE + x;
 	let byte_offset = offset / 8;
-	assert!(byte_offset < BITMAP_SIZE);
 	let bit_shift = offset % 8;
 	bitmap[byte_offset] &= !(0b10000000 >> bit_shift);
 }
@@ -906,7 +995,6 @@ fn is_on_bitmap(bitmap: &[u8; BITMAP_SIZE], x: usize, y: usize) -> bool
 {
 	let offset = y * MAP_SIZE + x;
 	let byte_offset = offset / 8;
-	assert!(byte_offset < BITMAP_SIZE);
 	let bit_shift = offset % 8;
 	bitmap[byte_offset] & (0b10000000 >> bit_shift) > 0
 }
@@ -925,6 +1013,53 @@ fn draw_on_quadmap(
 	quadmap[byte_offset] &= !(0b11000000 >> bit_shift);
 	let value = value & 0b11;
 	quadmap[byte_offset] |= (value << 6) >> bit_shift;
+}
+
+fn set_on_propmap(
+	propmap: &mut [u8; PROPMAP_SIZE],
+	u: usize,
+	v: usize,
+	terrain_type: Option<TerrainType>,
+)
+{
+	let value = match terrain_type
+	{
+		None => 0,
+		Some(TerrainType::Grass) => 1,
+		Some(TerrainType::Forest) => 5,
+		Some(TerrainType::Hill) => 10,
+		Some(TerrainType::Mountain) => 12,
+		Some(TerrainType::Water) => 0,
+	};
+	let offset = v * PROP_GRID_SIZE + u;
+	let byte_offset = offset / 2;
+	assert!(byte_offset < PROPMAP_SIZE);
+	let bit_shift = 4 * (offset % 2);
+	propmap[byte_offset] &= !(0b11110000 >> bit_shift);
+	let value = value & 0b1111;
+	propmap[byte_offset] |= (value << 4) >> bit_shift;
+}
+
+fn get_from_propmap(
+	propmap: &[u8; PROPMAP_SIZE],
+	u: usize,
+	v: usize,
+) -> Option<TerrainType>
+{
+	let offset = v * PROP_GRID_SIZE + u;
+	let byte_offset = offset / 2;
+	assert!(byte_offset < PROPMAP_SIZE);
+	let bit_shift = 4 - 4 * (offset % 2);
+	let value = (propmap[byte_offset] >> bit_shift) & 0b1111;
+	match value
+	{
+		0 => None,
+		1..=4 => Some(TerrainType::Grass),
+		5..=9 => Some(TerrainType::Forest),
+		10..=11 => Some(TerrainType::Hill),
+		12..=15 => Some(TerrainType::Mountain),
+		16.. => unreachable!(),
+	}
 }
 
 fn pick_random_centroid_xy_at_rc(

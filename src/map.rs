@@ -321,7 +321,7 @@ impl Map
 					}
 					None =>
 					{
-						//draw_on_bitmap(&mut self.ink_bitmap, x, y);
+						draw_on_bitmap(&mut self.ink_bitmap, x, y);
 					}
 				}
 			}
@@ -470,12 +470,16 @@ impl Map
 					}
 					else if distance < 4.0 + 10.0
 					{
-						let noise = self
-							.occupation_noise
-							.as_ref()
-							.unwrap()
-							.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-						10.0 * (distance - 4.0) + noise < 0.0
+						if let Some(gen) = &self.occupation_noise
+						{
+							let noise =
+								gen.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+							10.0 * (distance - 4.0) + noise < 0.0
+						}
+						else
+						{
+							false
+						}
 					}
 					else
 					{
@@ -663,7 +667,7 @@ impl Map
 			})
 			.min_by_key(|(_r, _c, sqdis)| *sqdis)
 			.map(|(r, c, sqdis)| (r, c, (sqdis as f64).sqrt()))
-			.unwrap()
+			.unwrap_or((0, 0, 40404.0))
 	}
 
 	fn closest_occupied_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
@@ -834,7 +838,7 @@ impl Cell
 			Contents::Terrain { is_occupied, .. } => *is_occupied = true,
 			Contents::Merged { is_occupied, .. } => *is_occupied = true,
 			Contents::Culled { is_occupied, .. } => *is_occupied = true,
-			_ => unreachable!(),
+			_ => (),
 		}
 	}
 
@@ -848,7 +852,7 @@ impl Cell
 			{
 				*merge_importance += 1;
 			}
-			_ => unreachable!(),
+			_ => (),
 		}
 	}
 
@@ -911,7 +915,7 @@ impl Cell
 					}
 				}
 			},
-			_ => unreachable!(),
+			_ => (),
 		}
 	}
 
@@ -957,7 +961,7 @@ impl Cell
 					None
 				}
 			}
-			_ => unreachable!(),
+			_ => None,
 		};
 
 		if let Some(terrain_type) = terrain_type
@@ -1058,7 +1062,7 @@ fn get_from_propmap(
 		5..=9 => Some(TerrainType::Forest),
 		10..=11 => Some(TerrainType::Hill),
 		12..=15 => Some(TerrainType::Mountain),
-		16.. => unreachable!(),
+		16.. => None,
 	}
 }
 

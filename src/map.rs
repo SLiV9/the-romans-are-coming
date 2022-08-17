@@ -404,22 +404,21 @@ impl Map
 			for c in 0..GRID_SIZE
 			{
 				let cell = &mut self.cells[r][c];
-				let (te, tf) = match cell.terrain_type()
+				let terrain_type = match cell.contents
 				{
-					Some(TerrainType::Water) => (-100.0, 0.0),
-					Some(TerrainType::Mountain) => (1000.0, 0.0),
-					Some(TerrainType::Hill) =>
+					Contents::Region { terrain_type, .. } => terrain_type,
+					_ => continue,
+				};
+				let (te, tf) = match terrain_type
+				{
+					TerrainType::Water => (-100.0, 0.0),
+					TerrainType::Mountain => (1000.0, 0.0),
+					TerrainType::Hill =>
 					{
 						(ELEVATION_THRESHOLD_HILL + 10.0, -200.0)
 					}
-					Some(TerrainType::Forest) => (20.0, 400.0),
-					Some(TerrainType::Grass) => (10.0, -200.0),
-					None =>
-					{
-						// This is a region clearing so the placement does
-						// not really matter.
-						continue;
-					}
+					TerrainType::Forest => (20.0, 400.0),
+					TerrainType::Grass => (10.0, -200.0),
 				};
 				let x = cell.centroid_x as usize;
 				let y = cell.centroid_y as usize;
@@ -461,17 +460,26 @@ impl Map
 				let cell = &self.cells[r][c];
 				let x = cell.centroid_x as usize;
 				let y = cell.centroid_y as usize;
-				match cell.terrain_type()
+				match cell.contents
 				{
-					Some(TerrainType::Water) => (),
-					Some(_) =>
+					Contents::Region {
+						terrain_type: TerrainType::Water,
+						..
+					} => (),
+					Contents::Region {
+						terrain_type: _, ..
+					} =>
 					{
 						draw_on_bitmap(&mut self.ink_bitmap, x, y);
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
 						draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
 					}
-					None if false =>
+					Contents::Subregion { .. } if false =>
+					{
+						draw_on_bitmap(&mut self.ink_bitmap, x, y);
+					}
+					Contents::Culled { .. } if true =>
 					{
 						draw_on_bitmap(&mut self.ink_bitmap, x, y);
 					}
@@ -596,22 +604,23 @@ impl Map
 			for c in 0..4
 			{
 				let cell = &mut self.cells[r][c];
-				match cell.terrain_type()
+				match cell.contents
 				{
-					Some(_) =>
+					Contents::Region { .. } =>
 					{
 						if (c <= 2) || rng.bool()
 						{
 							cell.become_occupied();
 						}
 					}
-					None =>
+					Contents::Subregion { .. } | Contents::Culled { .. } =>
 					{
 						if c <= 2
 						{
 							cell.become_occupied();
 						}
 					}
+					_ => (),
 				}
 			}
 		}
@@ -998,10 +1007,10 @@ impl Map
 
 	fn soft_merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
-		let terrain_type = match self.cells[r][c].terrain_type()
+		let terrain_type = match self.cells[r][c].contents
 		{
-			Some(tt) => tt,
-			None => return,
+			Contents::Unmerged { terrain_type, .. } => terrain_type,
+			_ => return,
 		};
 		if self.cells[r][c].is_crucial()
 		{
@@ -1020,45 +1029,56 @@ impl Map
 			};
 			let rr = ((r as i32) + dr) as usize;
 			let cc = ((c as i32) + dc) as usize;
-			if self.cells[rr][cc].terrain_type() == Some(terrain_type)
+			match self.cells[rr][cc].contents
 			{
-				if self.cells[rr][cc].is_crucial()
+				Contents::Unmerged {
+					terrain_type: tt, ..
+				} =>
 				{
-					self.cells[r][c].contents = Contents::Merged {
-						parent_row: rr as u8,
-						parent_col: cc as u8,
-						parent_terrain_type: terrain_type,
-					};
+					if tt != terrain_type
+					{
+						continue;
+					}
 				}
-				else if rng.bool()
-				{
-					self.cells[rr][cc].contents = Contents::Merged {
-						parent_row: r as u8,
-						parent_col: c as u8,
-						parent_terrain_type: terrain_type,
-					};
-					self.cells[r][c].make_more_important();
-				}
-				else
-				{
-					self.cells[r][c].contents = Contents::Merged {
-						parent_row: rr as u8,
-						parent_col: cc as u8,
-						parent_terrain_type: terrain_type,
-					};
-					self.cells[rr][cc].make_more_important();
-				}
-				break;
+				_ => continue,
 			}
+			// Merge either cell into the other.
+			if self.cells[rr][cc].is_crucial()
+			{
+				self.cells[r][c].contents = Contents::Merged {
+					parent_row: rr as u8,
+					parent_col: cc as u8,
+					parent_terrain_type: terrain_type,
+				};
+			}
+			else if rng.bool()
+			{
+				self.cells[rr][cc].contents = Contents::Merged {
+					parent_row: r as u8,
+					parent_col: c as u8,
+					parent_terrain_type: terrain_type,
+				};
+				self.cells[r][c].make_more_important();
+			}
+			else
+			{
+				self.cells[r][c].contents = Contents::Merged {
+					parent_row: rr as u8,
+					parent_col: cc as u8,
+					parent_terrain_type: terrain_type,
+				};
+				self.cells[rr][cc].make_more_important();
+			}
+			break;
 		}
 	}
 
 	fn merge_edge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
-		let terrain_type = match self.cells[r][c].terrain_type()
+		let terrain_type = match self.cells[r][c].contents
 		{
-			Some(tt) => tt,
-			None => return,
+			Contents::Unmerged { terrain_type, .. } => terrain_type,
+			_ => return,
 		};
 		if self.cells[r][c].is_crucial()
 		{
@@ -1082,25 +1102,36 @@ impl Map
 			{
 				continue;
 			}
-			if self.cells[rr][cc].terrain_type() == Some(terrain_type)
+			match self.cells[rr][cc].contents
 			{
-				self.cells[r][c].contents = Contents::Merged {
-					parent_row: rr as u8,
-					parent_col: cc as u8,
-					parent_terrain_type: terrain_type,
-				};
-				self.cells[rr][cc].make_more_important();
-				break;
+				Contents::Unmerged {
+					terrain_type: tt, ..
+				} =>
+				{
+					if tt != terrain_type
+					{
+						continue;
+					}
+				}
+				_ => continue,
 			}
+			// Merge into the other cell.
+			self.cells[r][c].contents = Contents::Merged {
+				parent_row: rr as u8,
+				parent_col: cc as u8,
+				parent_terrain_type: terrain_type,
+			};
+			self.cells[rr][cc].make_more_important();
+			break;
 		}
 	}
 
 	fn force_merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
-		let terrain_type = match self.cells[r][c].terrain_type()
+		let terrain_type = match self.cells[r][c].contents
 		{
-			Some(tt) => tt,
-			None => return,
+			Contents::Unmerged { terrain_type, .. } => terrain_type,
+			_ => return,
 		};
 		let mut adjacents = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 		rng.shuffle(&mut adjacents);
@@ -1120,16 +1151,30 @@ impl Map
 			{
 				continue;
 			}
-			if self.cells[rr][cc].terrain_type() == Some(terrain_type)
+			match self.cells[rr][cc].contents
 			{
-				self.cells[r][c].contents = Contents::Merged {
-					parent_row: rr as u8,
-					parent_col: cc as u8,
-					parent_terrain_type: terrain_type,
-				};
-				self.cells[rr][cc].make_more_important();
-				break;
+				Contents::Unmerged {
+					terrain_type: tt, ..
+				}
+				| Contents::Merged {
+					parent_terrain_type: tt,
+					..
+				} =>
+				{
+					if tt != terrain_type
+					{
+						continue;
+					}
+				}
+				_ => continue,
 			}
+			// Merge into the other cell, even if it is already merged.
+			self.cells[r][c].contents = Contents::Merged {
+				parent_row: rr as u8,
+				parent_col: cc as u8,
+				parent_terrain_type: terrain_type,
+			};
+			return;
 		}
 
 		// If we could not merge, cull it.
@@ -1139,7 +1184,14 @@ impl Map
 	fn calculate_cell_badness(&self, r: usize, c: usize) -> i8
 	{
 		let cell = &self.cells[r][c];
-		let terrain_type = cell.terrain_type();
+		let terrain_type = match cell.contents
+		{
+			Contents::Unmerged { terrain_type, .. } => terrain_type,
+			_ =>
+			{
+				return 0;
+			}
+		};
 		let mut num_too_close: usize = 0;
 		let mut num_close_similar: usize = 0;
 		let mut num_close_different: usize = 0;
@@ -1162,11 +1214,13 @@ impl Map
 				let rr = rr as usize;
 				let cc = cc as usize;
 				let other = &self.cells[rr][cc];
-				match other.contents
+				let other_terrain_type = match other.contents
 				{
-					Contents::Unmerged { .. } => (),
+					Contents::Unmerged {
+						terrain_type: tt, ..
+					} => tt,
 					_ => continue,
-				}
+				};
 				let dx = (other.centroid_x as i32) - (cell.centroid_x as i32);
 				let dy = (other.centroid_y as i32) - (cell.centroid_y as i32);
 				if dx * dx + dy * dy
@@ -1181,7 +1235,7 @@ impl Map
 				{
 					num_too_close += 1;
 				}
-				if other.terrain_type() == terrain_type
+				if other_terrain_type == terrain_type
 				{
 					num_close_similar += 1;
 				}
@@ -1291,8 +1345,11 @@ impl Cell
 	{
 		match self.contents
 		{
-			Contents::Unmerged { terrain_type, .. } => Some(terrain_type),
 			Contents::Region { terrain_type, .. } => Some(terrain_type),
+			Contents::Subregion {
+				parent_terrain_type,
+				..
+			} => Some(parent_terrain_type),
 			_ => None,
 		}
 	}

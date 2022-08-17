@@ -22,7 +22,7 @@ pub const DEFAULT: [u32; 4] = [PAPER, BROWN, BLACK, PAPER];
 pub const SNOW: [u32; 4] = [PAPER, BROWN, BLACK, WHITE];
 pub const BLOOD: [u32; 4] = [PAPER, BROWN, BLACK, RED];
 pub const GOLD: [u32; 4] = [PAPER, BROWN, BLACK, YELLOW];
-pub const GRASS: [u32; 4] = [PAPER, BROWN, BLACK, GREEN];
+pub const NATURE: [u32; 4] = [PAPER, BROWN, BLACK, GREEN];
 pub const WATER: [u32; 4] = [PAPER, BROWN, BLACK, BLUE];
 pub const WINE: [u32; 4] = [PAPER, BROWN, BLACK, PURPLE];
 

@@ -44,8 +44,6 @@ impl Level
 
 	pub fn draw(&mut self)
 	{
-		unsafe { *PALETTE = palette::WINE };
-
 		{
 			// TODO do this more cleanly?
 			let map = MAP.get_mut();

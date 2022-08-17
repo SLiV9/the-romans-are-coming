@@ -6,6 +6,7 @@
 
 use crate::wasm4::*;
 
+use crate::palette;
 use crate::sprites;
 
 use fastrand;
@@ -18,6 +19,7 @@ pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 pub const PROP_GRID_SIZE: usize = 40;
 pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
 pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
+pub const PROP_REGION_MAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE;
 
 const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
 const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
@@ -43,6 +45,9 @@ const ELEVATION_THRESHOLD_WATER: f64 = 0.0;
 const FOREST_THRESHOLD_ON_HILL: f64 = 10.0;
 const FOREST_THRESHOLD_ON_GRASS: f64 = 200.0;
 
+const MAP_X: i32 = 0;
+const MAP_Y: i32 = 5;
+
 pub struct Map
 {
 	water_bitmap: [u8; BITMAP_SIZE],
@@ -52,6 +57,7 @@ pub struct Map
 	occupation_bitmap: [u8; BITMAP_SIZE],
 	propmap: [u8; PROPMAP_SIZE],
 	surface_propmap: [u8; PROPMAP_SIZE],
+	prop_region_map: [u8; PROP_REGION_MAP_SIZE],
 	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
 	occupation_noise: Option<PerlinNoise2D>,
 }
@@ -78,6 +84,7 @@ impl Map
 			occupation_bitmap: [0; BITMAP_SIZE],
 			propmap: [0; PROPMAP_SIZE],
 			surface_propmap: [0; PROPMAP_SIZE],
+			prop_region_map: [0; PROP_REGION_MAP_SIZE],
 			cells: [[EMPTY_CELL; GRID_SIZE]; GRID_SIZE],
 			occupation_noise: None,
 		}
@@ -223,6 +230,7 @@ impl Map
 				cell.realize_terrain();
 			}
 		}
+		// Merge cells to determine candidates for region clearings.
 		for i in 0..GRID_SIZE
 		{
 			self.merge_edge_cell(i, 0, rng);
@@ -254,25 +262,27 @@ impl Map
 				self.soft_merge_cell(r, c, rng);
 			}
 		}
+		// Remove the cells with the highest badness until we have between
+		// 25 and 35 regions.
 		let mut cell_badness = [0i8; GRID_SIZE * GRID_SIZE];
-		let mut num_clickables = 0;
+		let mut num_candidates = 0;
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
 			{
 				match self.cells[r][c].contents
 				{
-					Contents::Terrain { .. } =>
+					Contents::Unmerged { .. } =>
 					{
 						let badness = self.calculate_cell_badness(r, c);
 						cell_badness[r * GRID_SIZE + c] = badness;
-						num_clickables += 1;
+						num_candidates += 1;
 					}
 					_ => (),
 				}
 			}
 		}
-		while num_clickables > 25
+		while num_candidates > 25
 		{
 			let worst = cell_badness
 				.iter()
@@ -290,7 +300,7 @@ impl Map
 				let c = offset % GRID_SIZE;
 				self.force_merge_cell(r, c, rng);
 				cell_badness[offset] = 0;
-				num_clickables -= 1;
+				num_candidates -= 1;
 
 				for dr in -DBR_BBOX_RADIUS..=DBR_BBOX_RADIUS
 				{
@@ -313,7 +323,7 @@ impl Map
 						let other = &self.cells[rr][cc];
 						match other.contents
 						{
-							Contents::Terrain { .. } => (),
+							Contents::Unmerged { .. } => (),
 							_ => continue,
 						}
 						let b = self.calculate_cell_badness(rr, cc);
@@ -326,6 +336,69 @@ impl Map
 				break;
 			}
 		}
+		// We have found our regions.
+		let mut num_regions = 0;
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let cell = &mut self.cells[r][c];
+				match cell.contents
+				{
+					Contents::Unmerged {
+						terrain_type,
+						merge_importance: _,
+					} =>
+					{
+						num_regions += 1;
+						cell.contents = Contents::Region {
+							terrain_type,
+							region_id: num_regions as u8,
+							is_occupied: false,
+						};
+					}
+					_ => (),
+				}
+			}
+		}
+		// Match merged cells with their regions.
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				match self.cells[r][c].contents
+				{
+					Contents::Merged {
+						parent_row,
+						parent_col,
+						parent_terrain_type,
+					} =>
+					{
+						let region_id = self.find_parent_region_id(
+							parent_row as usize,
+							parent_col as usize,
+						);
+
+						let cell = &mut self.cells[r][c];
+						if let Some(parent_region_id) = region_id
+						{
+							cell.contents = Contents::Subregion {
+								parent_region_id,
+								parent_terrain_type,
+								is_occupied: false,
+							};
+						}
+						else
+						{
+							cell.contents =
+								Contents::Culled { is_occupied: false };
+						}
+					}
+					_ => (),
+				}
+			}
+		}
+		// Adjust region clearing positions.
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
@@ -343,7 +416,7 @@ impl Map
 					Some(TerrainType::Grass) => (10.0, -200.0),
 					None =>
 					{
-						// This is not clickable terrain so the center does
+						// This is a region clearing so the placement does
 						// not really matter.
 						continue;
 					}
@@ -380,6 +453,7 @@ impl Map
 				}
 			}
 		}
+		// Draw region clearings.
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
@@ -396,7 +470,6 @@ impl Map
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
 						draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
-						trace(format!("r{}c{} => {:?}", r, c, cell));
 					}
 					None if false =>
 					{
@@ -406,6 +479,7 @@ impl Map
 				}
 			}
 		}
+		// Determine props.
 		for v in 0..PROP_GRID_SIZE
 		{
 			for u in 0..PROP_GRID_SIZE
@@ -461,8 +535,32 @@ impl Map
 				};
 				set_on_propmap(&mut self.propmap, u, v, prop_type);
 				set_on_propmap(&mut self.surface_propmap, u, v, terrain_type);
+				let (r, c, _distance) =
+					self.closest_rc_to_xy(x as i32, y as i32);
+				match self.cells[r][c].contents
+				{
+					Contents::Region {
+						region_id,
+						terrain_type: tt,
+						..
+					}
+					| Contents::Subregion {
+						parent_region_id: region_id,
+						parent_terrain_type: tt,
+						..
+					} =>
+					{
+						if Some(tt) == terrain_type
+						{
+							let offset = v * PROP_GRID_SIZE + u;
+							self.prop_region_map[offset] = region_id;
+						}
+					}
+					_ => (),
+				}
 			}
 		}
+		// Remove props around clearings.
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
@@ -470,34 +568,29 @@ impl Map
 				let cell = &mut self.cells[r][c];
 				match cell.contents
 				{
-					Contents::Terrain { .. } =>
+					Contents::Region { .. } => (),
+					_ => continue,
+				}
+				let x = cell.centroid_x as usize;
+				let y = cell.centroid_y as usize;
+				let u = x / PROP_GRID_CELL_SIZE;
+				let v = y / PROP_GRID_CELL_SIZE;
+				for (dv, dus) in [(0, -1..=1), (1, -1..=2), (2, -1..=2)]
+				{
+					for du in dus
 					{
-						let x = cell.centroid_x as usize;
-						let y = cell.centroid_y as usize;
-						let u = x / PROP_GRID_CELL_SIZE;
-						let v = y / PROP_GRID_CELL_SIZE;
-						for (dv, dus) in [(0, -1..=1), (1, -1..=2), (2, -1..=2)]
+						let uu = (u as i32 + du) as usize;
+						let vv = (v as i32 + dv) as usize;
+						if uu < PROP_GRID_SIZE && vv < PROP_GRID_SIZE
 						{
-							for du in dus
-							{
-								let uu = (u as i32 + du) as usize;
-								let vv = (v as i32 + dv) as usize;
-								if uu < PROP_GRID_SIZE && vv < PROP_GRID_SIZE
-								{
-									set_on_propmap(
-										&mut self.propmap,
-										uu,
-										vv,
-										None,
-									);
-								}
-							}
+							set_on_propmap(&mut self.propmap, uu, vv, None);
 						}
 					}
-					_ => (),
 				}
 			}
 		}
+		// Mock up some roman occupation.
+		// TODO remove
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..4
@@ -595,30 +688,37 @@ impl Map
 
 	pub fn draw(&self)
 	{
-		let map_x = 0;
-		let map_y = 5;
+		let hovered_region_id = self.determine_hovered_region_id();
 
 		unsafe { *DRAW_COLORS = 0x40 };
-		for v in 0..PROP_GRID_SIZE
+		if let Some(region_id) = hovered_region_id
 		{
-			for u in 0..PROP_GRID_SIZE
+			for v in 0..PROP_GRID_SIZE
 			{
-				let x = map_x + (u * PROP_GRID_CELL_SIZE) as i32;
-				let y = map_y + (v * PROP_GRID_CELL_SIZE) as i32;
-				let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
-				match get_from_propmap(&self.surface_propmap, u, v)
+				for u in 0..PROP_GRID_SIZE
 				{
-					Some(TerrainType::Mountain) => (),
-					Some(TerrainType::Hill) =>
+					let offset = v * PROP_GRID_SIZE + u;
+					if self.prop_region_map[offset] != region_id
 					{
-						sprites::draw_surface(x, y, alt);
+						continue;
 					}
-					Some(TerrainType::Forest) => (),
-					Some(TerrainType::Grass) =>
+					let x = MAP_X + (u * PROP_GRID_CELL_SIZE) as i32;
+					let y = MAP_Y + (v * PROP_GRID_CELL_SIZE) as i32;
+					let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
+					match get_from_propmap(&self.surface_propmap, u, v)
 					{
-						sprites::draw_surface(x, y, alt);
+						Some(TerrainType::Mountain) => (),
+						Some(TerrainType::Hill) =>
+						{
+							sprites::draw_surface(x, y, alt);
+						}
+						Some(TerrainType::Forest) => (),
+						Some(TerrainType::Grass) =>
+						{
+							sprites::draw_surface(x, y, alt);
+						}
+						_ => (),
 					}
-					_ => (),
 				}
 			}
 		}
@@ -626,8 +726,8 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.surface_bitmap,
-			map_x,
-			map_y,
+			MAP_X,
+			MAP_Y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -635,8 +735,8 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.water_bitmap,
-			map_x,
-			map_y,
+			MAP_X,
+			MAP_Y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -644,8 +744,8 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x10 };
 		blit(
 			&self.occupation_bitmap,
-			map_x,
-			map_y,
+			MAP_X,
+			MAP_Y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -653,8 +753,8 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.occupation_bitmap,
-			map_x,
-			map_y + 3,
+			MAP_X,
+			MAP_Y + 3,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -662,8 +762,8 @@ impl Map
 		unsafe { *DRAW_COLORS = 0x30 };
 		blit(
 			&self.ink_bitmap,
-			map_x,
-			map_y,
+			MAP_X,
+			MAP_Y,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -675,37 +775,48 @@ impl Map
 			{
 				for c in 0..GRID_SIZE
 				{
-					let x0 = map_x + self.cells[r][c].centroid_x as i32;
-					let y0 = map_y + self.cells[r][c].centroid_y as i32;
+					let x0 = MAP_X + self.cells[r][c].centroid_x as i32;
+					let y0 = MAP_Y + self.cells[r][c].centroid_y as i32;
 					if r > 0
 					{
-						let xx = map_x + self.cells[r - 1][c].centroid_x as i32;
-						let yy = map_y + self.cells[r - 1][c].centroid_y as i32;
+						let xx = MAP_X + self.cells[r - 1][c].centroid_x as i32;
+						let yy = MAP_Y + self.cells[r - 1][c].centroid_y as i32;
 						line(x0, y0, xx, yy);
 					}
 					if c > 0
 					{
-						let xx = map_x + self.cells[r][c - 1].centroid_x as i32;
-						let yy = map_y + self.cells[r][c - 1].centroid_y as i32;
+						let xx = MAP_X + self.cells[r][c - 1].centroid_x as i32;
+						let yy = MAP_Y + self.cells[r][c - 1].centroid_y as i32;
 						line(x0, y0, xx, yy);
 					}
 				}
 			}
 		}
 
-		unsafe { *DRAW_COLORS = 0x4320 };
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
 			{
 				let cell = &self.cells[r][c];
-				match cell.terrain_type()
+				match cell.contents
 				{
-					Some(TerrainType::Water) =>
+					Contents::Region {
+						terrain_type: TerrainType::Water,
+						region_id,
+						is_occupied: _,
+					} =>
 					{
+						if hovered_region_id == Some(region_id)
+						{
+							unsafe { *DRAW_COLORS = 0x4320 };
+						}
+						else
+						{
+							unsafe { *DRAW_COLORS = 0x1320 };
+						}
 						sprites::draw_boat(
-							map_x + (cell.centroid_x as i32),
-							map_y + (cell.centroid_y as i32),
+							MAP_X + (cell.centroid_x as i32),
+							MAP_Y + (cell.centroid_y as i32),
 							((2 * r + 3 * c) % 17) as u8,
 						);
 					}
@@ -717,9 +828,19 @@ impl Map
 		{
 			for u in 0..PROP_GRID_SIZE
 			{
-				let x = map_x + (u * PROP_GRID_CELL_SIZE) as i32;
+				let offset = v * PROP_GRID_SIZE + u;
+				let region_id = self.prop_region_map[offset];
+				if hovered_region_id == Some(region_id)
+				{
+					unsafe { *DRAW_COLORS = 0x4320 };
+				}
+				else
+				{
+					unsafe { *DRAW_COLORS = 0x1320 };
+				}
+				let x = MAP_X + (u * PROP_GRID_CELL_SIZE) as i32;
 				let y =
-					map_y + (v * PROP_GRID_CELL_SIZE) as i32 + (u % 2) as i32;
+					MAP_Y + (v * PROP_GRID_CELL_SIZE) as i32 + (u % 2) as i32;
 				let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
 				match get_from_propmap(&self.propmap, u, v)
 				{
@@ -745,6 +866,51 @@ impl Map
 					_ => (),
 				}
 			}
+		}
+	}
+
+	pub fn determine_hovered_region_id(&self) -> Option<u8>
+	{
+		let (mouse_x, mouse_y): (i16, i16) = unsafe { (*MOUSE_X, *MOUSE_Y) };
+		let x = (mouse_x as i32) - MAP_X;
+		let y = (mouse_y as i32) - MAP_Y;
+		let (r, c, distance) = self.closest_rc_to_xy(x, y);
+		if r == 0 || distance > 1000.0
+		{
+			return None;
+		}
+		match self.cells[r][c].contents
+		{
+			Contents::Region {
+				region_id,
+				terrain_type,
+				is_occupied,
+			}
+			| Contents::Subregion {
+				parent_region_id: region_id,
+				parent_terrain_type: terrain_type,
+				is_occupied,
+			} =>
+			{
+				let palette = if is_occupied
+				{
+					palette::DEFAULT
+				}
+				else
+				{
+					match terrain_type
+					{
+						TerrainType::Water => palette::WATER,
+						TerrainType::Mountain => palette::SNOW,
+						TerrainType::Hill => palette::WINE,
+						TerrainType::Forest => palette::NATURE,
+						TerrainType::Grass => palette::GOLD,
+					}
+				};
+				unsafe { *PALETTE = palette };
+				Some(region_id)
+			}
+			_ => None,
 		}
 	}
 
@@ -832,12 +998,12 @@ impl Map
 
 	fn soft_merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
-		let tt = self.cells[r][c].terrain_type();
-		if tt.is_none()
+		let terrain_type = match self.cells[r][c].terrain_type()
 		{
-			return;
-		}
-		else if self.cells[r][c].is_crucial()
+			Some(tt) => tt,
+			None => return,
+		};
+		if self.cells[r][c].is_crucial()
 		{
 			return;
 		}
@@ -854,14 +1020,14 @@ impl Map
 			};
 			let rr = ((r as i32) + dr) as usize;
 			let cc = ((c as i32) + dc) as usize;
-			if self.cells[rr][cc].terrain_type() == tt
+			if self.cells[rr][cc].terrain_type() == Some(terrain_type)
 			{
 				if self.cells[rr][cc].is_crucial()
 				{
 					self.cells[r][c].contents = Contents::Merged {
 						parent_row: rr as u8,
 						parent_col: cc as u8,
-						is_occupied: false,
+						parent_terrain_type: terrain_type,
 					};
 				}
 				else if rng.bool()
@@ -869,7 +1035,7 @@ impl Map
 					self.cells[rr][cc].contents = Contents::Merged {
 						parent_row: r as u8,
 						parent_col: c as u8,
-						is_occupied: false,
+						parent_terrain_type: terrain_type,
 					};
 					self.cells[r][c].make_more_important();
 				}
@@ -878,7 +1044,7 @@ impl Map
 					self.cells[r][c].contents = Contents::Merged {
 						parent_row: rr as u8,
 						parent_col: cc as u8,
-						is_occupied: false,
+						parent_terrain_type: terrain_type,
 					};
 					self.cells[rr][cc].make_more_important();
 				}
@@ -889,12 +1055,12 @@ impl Map
 
 	fn merge_edge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
-		let tt = self.cells[r][c].terrain_type();
-		if tt.is_none()
+		let terrain_type = match self.cells[r][c].terrain_type()
 		{
-			return;
-		}
-		else if self.cells[r][c].is_crucial()
+			Some(tt) => tt,
+			None => return,
+		};
+		if self.cells[r][c].is_crucial()
 		{
 			return;
 		}
@@ -916,12 +1082,12 @@ impl Map
 			{
 				continue;
 			}
-			if self.cells[rr][cc].terrain_type() == tt
+			if self.cells[rr][cc].terrain_type() == Some(terrain_type)
 			{
 				self.cells[r][c].contents = Contents::Merged {
 					parent_row: rr as u8,
 					parent_col: cc as u8,
-					is_occupied: false,
+					parent_terrain_type: terrain_type,
 				};
 				self.cells[rr][cc].make_more_important();
 				break;
@@ -931,7 +1097,11 @@ impl Map
 
 	fn force_merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
-		let terrain_type = self.cells[r][c].terrain_type();
+		let terrain_type = match self.cells[r][c].terrain_type()
+		{
+			Some(tt) => tt,
+			None => return,
+		};
 		let mut adjacents = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 		rng.shuffle(&mut adjacents);
 		for (dr, dc) in adjacents
@@ -950,12 +1120,12 @@ impl Map
 			{
 				continue;
 			}
-			if self.cells[rr][cc].terrain_type() == terrain_type
+			if self.cells[rr][cc].terrain_type() == Some(terrain_type)
 			{
 				self.cells[r][c].contents = Contents::Merged {
 					parent_row: rr as u8,
 					parent_col: cc as u8,
-					is_occupied: false,
+					parent_terrain_type: terrain_type,
 				};
 				self.cells[rr][cc].make_more_important();
 				break;
@@ -994,7 +1164,7 @@ impl Map
 				let other = &self.cells[rr][cc];
 				match other.contents
 				{
-					Contents::Terrain { .. } => (),
+					Contents::Unmerged { .. } => (),
 					_ => continue,
 				}
 				let dx = (other.centroid_x as i32) - (cell.centroid_x as i32);
@@ -1031,6 +1201,33 @@ impl Map
 		badness += 10 * (std::cmp::min(num_too_close, 8) as i8);
 		badness
 	}
+
+	fn find_parent_region_id(&self, r: usize, c: usize) -> Option<u8>
+	{
+		let mut rr = r;
+		let mut cc = c;
+		for _i in 0..10
+		{
+			match self.cells[rr][cc].contents
+			{
+				Contents::Region { region_id, .. } =>
+				{
+					return Some(region_id);
+				}
+				Contents::Merged {
+					parent_row,
+					parent_col,
+					parent_terrain_type: _,
+				} =>
+				{
+					rr = parent_row as usize;
+					cc = parent_col as usize;
+				}
+				_ => return None,
+			}
+		}
+		return None;
+	}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1045,21 +1242,31 @@ enum Contents
 		n_forest: u8,
 		n_grass: u8,
 	},
-	Terrain
+	Unmerged
 	{
 		terrain_type: TerrainType,
-		is_clickable: bool,
-		is_occupied: bool,
 		merge_importance: u8,
 	},
 	Merged
 	{
 		parent_row: u8,
 		parent_col: u8,
-		is_occupied: bool,
+		parent_terrain_type: TerrainType,
 	},
 	Culled
 	{
+		is_occupied: bool,
+	},
+	Region
+	{
+		region_id: u8,
+		terrain_type: TerrainType,
+		is_occupied: bool,
+	},
+	Subregion
+	{
+		parent_region_id: u8,
+		parent_terrain_type: TerrainType,
 		is_occupied: bool,
 	},
 }
@@ -1084,7 +1291,8 @@ impl Cell
 	{
 		match self.contents
 		{
-			Contents::Terrain { terrain_type, .. } => Some(terrain_type),
+			Contents::Unmerged { terrain_type, .. } => Some(terrain_type),
+			Contents::Region { terrain_type, .. } => Some(terrain_type),
 			_ => None,
 		}
 	}
@@ -1093,9 +1301,9 @@ impl Cell
 	{
 		match self.contents
 		{
-			Contents::Terrain { is_occupied, .. } => is_occupied,
-			Contents::Merged { is_occupied, .. } => is_occupied,
 			Contents::Culled { is_occupied, .. } => is_occupied,
+			Contents::Region { is_occupied, .. } => is_occupied,
+			Contents::Subregion { is_occupied, .. } => is_occupied,
 			_ => false,
 		}
 	}
@@ -1104,9 +1312,9 @@ impl Cell
 	{
 		match &mut self.contents
 		{
-			Contents::Terrain { is_occupied, .. } => *is_occupied = true,
-			Contents::Merged { is_occupied, .. } => *is_occupied = true,
 			Contents::Culled { is_occupied, .. } => *is_occupied = true,
+			Contents::Region { is_occupied, .. } => *is_occupied = true,
+			Contents::Subregion { is_occupied, .. } => *is_occupied = true,
 			_ => (),
 		}
 	}
@@ -1115,7 +1323,7 @@ impl Cell
 	{
 		match &mut self.contents
 		{
-			Contents::Terrain {
+			Contents::Unmerged {
 				merge_importance, ..
 			} =>
 			{
@@ -1129,7 +1337,7 @@ impl Cell
 	{
 		match self.contents
 		{
-			Contents::Terrain {
+			Contents::Unmerged {
 				merge_importance, ..
 			} => merge_importance >= 3,
 			_ => false,
@@ -1235,10 +1443,8 @@ impl Cell
 
 		if let Some(terrain_type) = terrain_type
 		{
-			self.contents = Contents::Terrain {
+			self.contents = Contents::Unmerged {
 				terrain_type,
-				is_clickable: false,
-				is_occupied: false,
 				merge_importance: 0,
 			}
 		}

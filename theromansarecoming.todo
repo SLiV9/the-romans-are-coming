@@ -5,10 +5,11 @@ Game design:
 Mechanics:
   ✔ Basic map generation @done (2022-08-15 18:42)
   ☐ Click on map regions
-  ☐ Highlight region with color when hovered
+  ✔ Highlight region with color when hovered @done (2022-08-17 14:23)
   ☐ Highlight relevant regions when hovering resource bar
   ☐ Gather resources
   ☐ Create fights
+    ☐ Preview fights when hovered
   ☐ Create cities
   ☐ End of year effects
 

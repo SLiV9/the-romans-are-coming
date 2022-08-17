@@ -47,7 +47,7 @@ pub struct Map
 {
 	water_bitmap: [u8; BITMAP_SIZE],
 	mountain_bitmap: [u8; BITMAP_SIZE],
-	debug_bitmap: [u8; BITMAP_SIZE],
+	surface_bitmap: [u8; BITMAP_SIZE],
 	ink_bitmap: [u8; BITMAP_SIZE],
 	occupation_bitmap: [u8; BITMAP_SIZE],
 	propmap: [u8; PROPMAP_SIZE],
@@ -72,7 +72,7 @@ impl Map
 		Self {
 			water_bitmap: [0; BITMAP_SIZE],
 			mountain_bitmap: [0; BITMAP_SIZE],
-			debug_bitmap: [0; BITMAP_SIZE],
+			surface_bitmap: [0; BITMAP_SIZE],
 			ink_bitmap: [0; BITMAP_SIZE],
 			occupation_bitmap: [0; BITMAP_SIZE],
 			propmap: [0; PROPMAP_SIZE],
@@ -187,19 +187,28 @@ impl Map
 				{
 					erase_on_bitmap(&mut self.mountain_bitmap, x, y);
 				}
-				if (terrain_type == TerrainType::Forest
-					&& ((x + y) % 2 == 0)
-					&& (x % 4 == 0) && (y % 4 == 0))
-					|| (terrain_type == TerrainType::Hill
-						&& ((x + y) % 2 == 0) && (x % 4 == 0 || y % 4 == 0))
-					|| (terrain_type == TerrainType::Mountain
-						&& ((x + y) % 2 == 0))
+				let has_surface = match terrain_type
 				{
-					draw_on_bitmap(&mut self.debug_bitmap, x, y);
+					TerrainType::Forest =>
+					{
+						((x + y) % 2 == 0)
+							&& (x % 4 == 0) && ((x / 2 + y) % 4 == 0)
+					}
+					TerrainType::Hill =>
+					{
+						((x / 2 + y) % 2 == 0)
+							&& ((x / 2 + y) % 4 == 0) && (y % 2 == 0)
+					}
+					TerrainType::Mountain => ((x + y) % 2 == 0),
+					_ => false,
+				};
+				if has_surface
+				{
+					draw_on_bitmap(&mut self.surface_bitmap, x, y);
 				}
 				else
 				{
-					erase_on_bitmap(&mut self.debug_bitmap, x, y);
+					erase_on_bitmap(&mut self.surface_bitmap, x, y);
 				}
 				self.cells[r][c].add_tally(terrain_type);
 			}
@@ -460,7 +469,7 @@ impl Map
 						let y = cell.centroid_y as usize;
 						let u = x / PROP_GRID_CELL_SIZE;
 						let v = y / PROP_GRID_CELL_SIZE;
-						for (dv, dus) in [(0, -1..=1), (1, -2..=2), (2, -1..=1)]
+						for (dv, dus) in [(0, -1..=1), (1, -1..=2), (2, -1..=2)]
 						{
 							for du in dus
 							{
@@ -581,9 +590,9 @@ impl Map
 	{
 		let map_x = 0;
 		let map_y = 5;
-		unsafe { *DRAW_COLORS = 0x00 };
+		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
-			&self.debug_bitmap,
+			&self.surface_bitmap,
 			map_x,
 			map_y,
 			MAP_SIZE as u32,
@@ -599,11 +608,20 @@ impl Map
 			MAP_SIZE as u32,
 			BLIT_1BPP,
 		);
-		unsafe { *DRAW_COLORS = 0x20 };
+		unsafe { *DRAW_COLORS = 0x10 };
 		blit(
 			&self.occupation_bitmap,
 			map_x,
 			map_y,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP,
+		);
+		unsafe { *DRAW_COLORS = 0x20 };
+		blit(
+			&self.occupation_bitmap,
+			map_x,
+			map_y + 2,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -669,7 +687,7 @@ impl Map
 				let x = map_x + (u * PROP_GRID_CELL_SIZE) as i32;
 				let y =
 					map_y + (v * PROP_GRID_CELL_SIZE) as i32 + (u % 2) as i32;
-				let alt = ((2 * u + 3 * v) % 17) as u8;
+				let alt = ((13 * u + 71 * v + 59 * (u + v)) % 97) as u8;
 				match get_from_propmap(&self.propmap, u, v)
 				{
 					Some(TerrainType::Mountain) =>
@@ -686,7 +704,14 @@ impl Map
 					}
 					Some(TerrainType::Grass) =>
 					{
-						//sprites::draw_grass(x, y, alt);
+						if (u + v) % 2 > 0
+						{
+							sprites::draw_grass(x, y, alt);
+						}
+						else
+						{
+							sprites::draw_grass(x, y, 0);
+						}
 					}
 					_ => (),
 				}
@@ -970,7 +995,7 @@ impl Map
 		let mut badness: i8 = 10;
 		if r == 0 || c == 0 || r == GRID_SIZE - 1 || c == GRID_SIZE - 1
 		{
-			badness += 5;
+			badness += 25;
 		}
 		badness -= std::cmp::min(num_close_different, 4) as i8;
 		badness += std::cmp::min(num_close_similar, 4) as i8;

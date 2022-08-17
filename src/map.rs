@@ -51,6 +51,7 @@ pub struct Map
 	ink_bitmap: [u8; BITMAP_SIZE],
 	occupation_bitmap: [u8; BITMAP_SIZE],
 	propmap: [u8; PROPMAP_SIZE],
+	surface_propmap: [u8; PROPMAP_SIZE],
 	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
 	occupation_noise: Option<PerlinNoise2D>,
 }
@@ -76,6 +77,7 @@ impl Map
 			ink_bitmap: [0; BITMAP_SIZE],
 			occupation_bitmap: [0; BITMAP_SIZE],
 			propmap: [0; PROPMAP_SIZE],
+			surface_propmap: [0; PROPMAP_SIZE],
 			cells: [[EMPTY_CELL; GRID_SIZE]; GRID_SIZE],
 			occupation_noise: None,
 		}
@@ -414,14 +416,7 @@ impl Map
 				let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 				let terrain_type = if e > ELEVATION_THRESHOLD_MOUNTAIN
 				{
-					if (u + v) % 2 == 0
-					{
-						Some(TerrainType::Mountain)
-					}
-					else
-					{
-						None
-					}
+					Some(TerrainType::Mountain)
 				}
 				else if e > ELEVATION_THRESHOLD_HILL
 				{
@@ -429,13 +424,9 @@ impl Map
 					{
 						Some(TerrainType::Forest)
 					}
-					else if (u + v) % 2 == 0
-					{
-						Some(TerrainType::Hill)
-					}
 					else
 					{
-						None
+						Some(TerrainType::Hill)
 					}
 				}
 				else if e > ELEVATION_THRESHOLD_WATER + 5.0
@@ -453,7 +444,23 @@ impl Map
 				{
 					None
 				};
-				set_on_propmap(&mut self.propmap, u, v, terrain_type);
+				let prop_type = match terrain_type
+				{
+					Some(TerrainType::Mountain) | Some(TerrainType::Hill) =>
+					{
+						if (u + v) % 2 == 0
+						{
+							terrain_type
+						}
+						else
+						{
+							None
+						}
+					}
+					_ => terrain_type,
+				};
+				set_on_propmap(&mut self.propmap, u, v, prop_type);
+				set_on_propmap(&mut self.surface_propmap, u, v, terrain_type);
 			}
 		}
 		for r in 0..GRID_SIZE
@@ -590,6 +597,32 @@ impl Map
 	{
 		let map_x = 0;
 		let map_y = 5;
+
+		unsafe { *DRAW_COLORS = 0x40 };
+		for v in 0..PROP_GRID_SIZE
+		{
+			for u in 0..PROP_GRID_SIZE
+			{
+				let x = map_x + (u * PROP_GRID_CELL_SIZE) as i32;
+				let y = map_y + (v * PROP_GRID_CELL_SIZE) as i32;
+				let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
+				match get_from_propmap(&self.surface_propmap, u, v)
+				{
+					Some(TerrainType::Mountain) => (),
+					Some(TerrainType::Hill) =>
+					{
+						sprites::draw_surface(x, y, alt);
+					}
+					Some(TerrainType::Forest) => (),
+					Some(TerrainType::Grass) =>
+					{
+						sprites::draw_surface(x, y, alt);
+					}
+					_ => (),
+				}
+			}
+		}
+
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.surface_bitmap,
@@ -621,7 +654,7 @@ impl Map
 		blit(
 			&self.occupation_bitmap,
 			map_x,
-			map_y + 2,
+			map_y + 3,
 			MAP_SIZE as u32,
 			MAP_SIZE as u32,
 			BLIT_1BPP,
@@ -687,7 +720,7 @@ impl Map
 				let x = map_x + (u * PROP_GRID_CELL_SIZE) as i32;
 				let y =
 					map_y + (v * PROP_GRID_CELL_SIZE) as i32 + (u % 2) as i32;
-				let alt = ((13 * u + 71 * v + 59 * (u + v)) % 97) as u8;
+				let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
 				match get_from_propmap(&self.propmap, u, v)
 				{
 					Some(TerrainType::Mountain) =>
@@ -704,13 +737,9 @@ impl Map
 					}
 					Some(TerrainType::Grass) =>
 					{
-						if (u + v) % 2 > 0
+						if alt < 25 && (u + v) % 2 > 0
 						{
 							sprites::draw_grass(x, y, alt);
-						}
-						else
-						{
-							sprites::draw_grass(x, y, 0);
 						}
 					}
 					_ => (),

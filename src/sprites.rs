@@ -6,6 +6,35 @@
 
 use crate::wasm4::*;
 
+pub fn draw_surface(x: i32, y: i32, alt: u8)
+{
+	let frame = (alt as u32) % SURFACE_FRAMES;
+	blit_sub(
+		&SURFACE_SHEET,
+		x + 1 - (SURFACE_WIDTH as i32) / 2,
+		y + 1 - (SURFACE_HEIGHT as i32),
+		SURFACE_WIDTH,
+		SURFACE_HEIGHT,
+		frame * SURFACE_WIDTH,
+		0,
+		SURFACE_SHEET_WIDTH,
+		SURFACE_SHEET_FLAGS,
+	);
+}
+
+const SURFACE_WIDTH: u32 = 8;
+const SURFACE_HEIGHT: u32 = SURFACE_SHEET_HEIGHT;
+const SURFACE_FRAMES: u32 = SURFACE_SHEET_WIDTH / SURFACE_WIDTH;
+
+// surface_sheet
+const SURFACE_SHEET_WIDTH: u32 = 32;
+const SURFACE_SHEET_HEIGHT: u32 = 4;
+const SURFACE_SHEET_FLAGS: u32 = 0; // BLIT_1BPP
+const SURFACE_SHEET: [u8; 16] = [
+	0x3e, 0x3f, 0x3e, 0x3f, 0xfc, 0xfc, 0x7c, 0x7c, 0x3f, 0x3e, 0x3f, 0x3e,
+	0x7c, 0x7c, 0xfc, 0xfc,
+];
+
 pub fn draw_grass(x: i32, y: i32, alt: u8)
 {
 	let frame = (alt as u32) % GRASS_FRAMES;
@@ -27,13 +56,12 @@ const GRASS_HEIGHT: u32 = GRASS_SHEET_HEIGHT;
 const GRASS_FRAMES: u32 = GRASS_SHEET_WIDTH / GRASS_WIDTH;
 
 // grass_sheet
-const GRASS_SHEET_WIDTH: u32 = 68;
+const GRASS_SHEET_WIDTH: u32 = 28;
 const GRASS_SHEET_HEIGHT: u32 = 2;
 const GRASS_SHEET_FLAGS: u32 = 1; // BLIT_2BPP
-const GRASS_SHEET: [u8; 34] = [
-	0xff, 0xff, 0xfc, 0x3c, 0x3c, 0xdf, 0x3f, 0x7f, 0xeb, 0xff, 0x7d, 0xff,
-	0xfd, 0xff, 0x7d, 0xff, 0xf7, 0xff, 0x3c, 0x3f, 0xff, 0x3c, 0xdd, 0xfc,
-	0x77, 0xbe, 0xff, 0xdd, 0xff, 0xdd, 0xff, 0x77, 0xff, 0x77,
+const GRASS_SHEET: [u8; 14] = [
+	0x10, 0x40, 0x28, 0x41, 0x01, 0x41, 0x04, 0x11, 0x44, 0xbe, 0x11, 0x11,
+	0x44, 0x44,
 ];
 
 pub fn draw_tree(x: i32, y: i32, alt: u8)

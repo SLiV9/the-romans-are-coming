@@ -44,7 +44,7 @@ impl Level
 
 	pub fn draw(&mut self)
 	{
-		unsafe { *PALETTE = palette::DEFAULT };
+		unsafe { *PALETTE = palette::WINE };
 
 		{
 			// TODO do this more cleanly?

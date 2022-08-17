@@ -298,7 +298,7 @@ impl Map
 
 				let r = offset / GRID_SIZE;
 				let c = offset % GRID_SIZE;
-				self.force_merge_cell(r, c, rng);
+				self.force_merge_cell(r, c);
 				cell_badness[offset] = 0;
 				num_candidates -= 1;
 
@@ -543,8 +543,13 @@ impl Map
 				};
 				set_on_propmap(&mut self.propmap, u, v, prop_type);
 				set_on_propmap(&mut self.surface_propmap, u, v, terrain_type);
+				if terrain_type.is_none()
+				{
+					continue;
+				}
 				let (r, c, _distance) =
 					self.closest_rc_to_xy(x as i32, y as i32);
+
 				match self.cells[r][c].contents
 				{
 					Contents::Region {
@@ -716,13 +721,10 @@ impl Map
 					let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
 					match get_from_propmap(&self.surface_propmap, u, v)
 					{
-						Some(TerrainType::Mountain) => (),
-						Some(TerrainType::Hill) =>
-						{
-							sprites::draw_surface(x, y, alt);
-						}
-						Some(TerrainType::Forest) => (),
-						Some(TerrainType::Grass) =>
+						Some(TerrainType::Mountain)
+						| Some(TerrainType::Hill)
+						| Some(TerrainType::Forest)
+						| Some(TerrainType::Grass) =>
 						{
 							sprites::draw_surface(x, y, alt);
 						}
@@ -1126,59 +1128,79 @@ impl Map
 		}
 	}
 
-	fn force_merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
+	fn force_merge_cell(&mut self, r: usize, c: usize)
 	{
 		let terrain_type = match self.cells[r][c].contents
 		{
 			Contents::Unmerged { terrain_type, .. } => terrain_type,
 			_ => return,
 		};
-		let mut adjacents = [(1, 0), (-1, 0), (0, 1), (0, -1)];
-		rng.shuffle(&mut adjacents);
-		for (dr, dc) in adjacents
+
+		let mut closest_parent = None;
+		let mut closest_sqdis =
+			2 * MAX_DISTANCE_BETWEEN_REGIONS * MAX_DISTANCE_BETWEEN_REGIONS;
+		for dr in -DBR_BBOX_RADIUS..=DBR_BBOX_RADIUS
 		{
-			if (r == 0 && dr < 0)
-				|| (c == 0 && dc < 0)
-				|| (r + 1 == GRID_SIZE && dr > 0)
-				|| (c + 1 == GRID_SIZE && dc > 0)
+			for dc in -DBR_BBOX_RADIUS..=DBR_BBOX_RADIUS
 			{
-				continue;
-			};
-			let rr = ((r as i32) + dr) as usize;
-			let cc = ((c as i32) + dc) as usize;
-			if (rr == 0 || rr == GRID_SIZE - 1)
-				&& (cc == 0 || cc == GRID_SIZE - 1)
-			{
-				continue;
-			}
-			match self.cells[rr][cc].contents
-			{
-				Contents::Unmerged {
-					terrain_type: tt, ..
-				}
-				| Contents::Merged {
-					parent_terrain_type: tt,
-					..
-				} =>
+				if dr == 0 && dc == 0
 				{
-					if tt != terrain_type
-					{
-						continue;
-					}
+					continue;
 				}
-				_ => continue,
+				let rr = r as i32 + dr;
+				let cc = c as i32 + dc;
+				if rr < 0
+					|| cc < 0 || (rr as usize > GRID_SIZE - 1)
+					|| (cc as usize > GRID_SIZE - 1)
+				{
+					continue;
+				}
+				let rr = rr as usize;
+				let cc = cc as usize;
+				let cell = &self.cells[r][c];
+				let other = &self.cells[rr][cc];
+				let other_terrain_type = match other.contents
+				{
+					Contents::Unmerged {
+						terrain_type: tt, ..
+					} => tt,
+					_ => continue,
+				};
+				if other_terrain_type != terrain_type
+				{
+					continue;
+				}
+				let dx = (other.centroid_x as i32) - (cell.centroid_x as i32);
+				let dy = (other.centroid_y as i32) - (cell.centroid_y as i32);
+				let sqdis = dx * dx + dy * dy;
+				if sqdis
+					> MAX_DISTANCE_BETWEEN_REGIONS
+						* MAX_DISTANCE_BETWEEN_REGIONS
+				{
+					continue;
+				}
+				if sqdis < closest_sqdis
+				{
+					closest_parent = Some((rr, cc));
+					closest_sqdis = sqdis;
+				}
 			}
+		}
+
+		if let Some((rr, cc)) = closest_parent
+		{
 			// Merge into the other cell, even if it is already merged.
 			self.cells[r][c].contents = Contents::Merged {
 				parent_row: rr as u8,
 				parent_col: cc as u8,
 				parent_terrain_type: terrain_type,
 			};
-			return;
 		}
-
-		// If we could not merge, cull it.
-		self.cells[r][c].contents = Contents::Culled { is_occupied: false };
+		else
+		{
+			// If we could not merge, cull it.
+			self.cells[r][c].contents = Contents::Culled { is_occupied: false };
+		}
 	}
 
 	fn calculate_cell_badness(&self, r: usize, c: usize) -> i8
@@ -1268,6 +1290,12 @@ impl Map
 				{
 					return Some(region_id);
 				}
+				Contents::Subregion {
+					parent_region_id, ..
+				} =>
+				{
+					return Some(parent_region_id);
+				}
 				Contents::Merged {
 					parent_row,
 					parent_col,
@@ -1280,6 +1308,7 @@ impl Map
 				_ => return None,
 			}
 		}
+		trace("circular parents");
 		return None;
 	}
 }

@@ -25,7 +25,9 @@ Sprites:
     ✔ Trees @done (2022-08-15 18:42)
     ✔ Hills @done (2022-08-15 18:42)
     ✔ Mountains @done (2022-08-15 18:42)
-    ✔ Waves @done (2022-08-15 18:42)
+    ☐ Waves
+      ☐ Add a tiny wave animation when placing a boat in water
+    ✔ Boats @done (2022-08-15 18:42)
     ☐ Houses
     ☐ Battlefields/graves
   ☐ Resource icons

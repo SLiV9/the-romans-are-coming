@@ -20,7 +20,8 @@ pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
 pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
 
 const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
-const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 40;
+const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
+const DBR_BBOX_RADIUS: i32 = 4;
 
 const NOISE_OCTAVES: i32 = 5;
 const NOISE_AMPLITUDE: f64 = 50.0;
@@ -213,10 +214,10 @@ impl Map
 		}
 		for i in 0..GRID_SIZE
 		{
-			self.force_merge_edge(i, 0, rng);
-			self.force_merge_edge(i, GRID_SIZE - 1, rng);
-			self.force_merge_edge(0, i, rng);
-			self.force_merge_edge(GRID_SIZE - 1, i, rng);
+			self.merge_edge_cell(i, 0, rng);
+			self.merge_edge_cell(i, GRID_SIZE - 1, rng);
+			self.merge_edge_cell(0, i, rng);
+			self.merge_edge_cell(GRID_SIZE - 1, i, rng);
 		}
 		for r in 1..(GRID_SIZE - 1)
 		{
@@ -242,77 +243,76 @@ impl Map
 				self.soft_merge_cell(r, c, rng);
 			}
 		}
-		let mut cell_goodness = [0i8; GRID_SIZE * GRID_SIZE];
+		let mut cell_badness = [0i8; GRID_SIZE * GRID_SIZE];
+		let mut num_clickables = 0;
 		for r in 0..GRID_SIZE
 		{
 			for c in 0..GRID_SIZE
 			{
-				let cell = &self.cells[r][c];
-				match cell.contents
+				match self.cells[r][c].contents
 				{
-					Contents::Terrain { terrain_type, .. } =>
+					Contents::Terrain { .. } =>
 					{
-						let mut num_too_close: usize = 0;
-						let mut num_close_similar: usize = 0;
-						let mut num_close_different: usize = 0;
-						for dr in -4..=4
-						{
-							for dc in -4..=4
-							{
-								if dr == 0 && dc == 0
-								{
-									continue;
-								}
-								let rr = r as i32 + dr;
-								let cc = c as i32 + dc;
-								if rr < 0
-									|| cc < 0 || (rr as usize > GRID_SIZE - 1)
-									|| (cc as usize > GRID_SIZE - 1)
-								{
-									continue;
-								}
-								let rr = rr as usize;
-								let cc = cc as usize;
-								let other = &self.cells[rr][cc];
-								match cell.contents
-								{
-									Contents::Terrain { .. } => (),
-									_ => continue,
-								}
-								let dx = (cell.centroid_x as i32)
-									- (other.centroid_x as i32);
-								let dy = (cell.centroid_y as i32)
-									- (other.centroid_y as i32);
-								if dx * dx + dy * dy
-									> MAX_DISTANCE_BETWEEN_REGIONS
-										* MAX_DISTANCE_BETWEEN_REGIONS
-								{
-									continue;
-								}
-								if dx * dx + dy * dy
-									< MIN_DISTANCE_BETWEEN_REGIONS
-										* MIN_DISTANCE_BETWEEN_REGIONS
-								{
-									num_too_close += 1;
-								}
-								if other.terrain_type() == Some(terrain_type)
-								{
-									num_close_similar += 1;
-								}
-								else
-								{
-									num_close_different += 1;
-								}
-							}
-						}
-						let goodness: i8 = 1
-							+ (std::cmp::min(num_close_different, 9) as i8)
-							- (std::cmp::min(num_close_similar, 9) as i8)
-							- 10 * (std::cmp::min(num_too_close, 10) as i8);
-						cell_goodness[r * GRID_SIZE + c] = goodness;
+						let badness = self.calculate_cell_badness(r, c);
+						cell_badness[r * GRID_SIZE + c] = badness;
+						num_clickables += 1;
 					}
 					_ => (),
 				}
+			}
+		}
+		while num_clickables > 25
+		{
+			let worst = cell_badness
+				.iter()
+				.enumerate()
+				.map(|(i, badness)| (i, *badness))
+				.max_by_key(|(_i, badness)| *badness);
+			if let Some((offset, badness)) = worst
+			{
+				if badness < 20
+				{
+					break;
+				}
+
+				let r = offset / GRID_SIZE;
+				let c = offset % GRID_SIZE;
+				self.force_merge_cell(r, c, rng);
+				cell_badness[offset] = 0;
+				num_clickables -= 1;
+
+				for dr in -DBR_BBOX_RADIUS..=DBR_BBOX_RADIUS
+				{
+					for dc in -DBR_BBOX_RADIUS..=DBR_BBOX_RADIUS
+					{
+						if dr == 0 && dc == 0
+						{
+							continue;
+						}
+						let rr = r as i32 + dr;
+						let cc = c as i32 + dc;
+						if rr < 0
+							|| cc < 0 || (rr as usize > GRID_SIZE - 1)
+							|| (cc as usize > GRID_SIZE - 1)
+						{
+							continue;
+						}
+						let rr = rr as usize;
+						let cc = cc as usize;
+						let other = &self.cells[rr][cc];
+						match other.contents
+						{
+							Contents::Terrain { .. } => (),
+							_ => continue,
+						}
+						let b = self.calculate_cell_badness(rr, cc);
+						cell_badness[rr * GRID_SIZE + cc] = b;
+					}
+				}
+			}
+			else
+			{
+				break;
 			}
 		}
 		for r in 0..GRID_SIZE
@@ -385,11 +385,13 @@ impl Map
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
 						draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
+						trace(format!("r{}c{} => {:?}", r, c, cell));
 					}
-					None =>
+					None if false =>
 					{
 						draw_on_bitmap(&mut self.ink_bitmap, x, y);
 					}
+					_ => (),
 				}
 			}
 		}
@@ -831,7 +833,7 @@ impl Map
 		}
 	}
 
-	fn force_merge_edge(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
+	fn merge_edge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
 	{
 		let tt = self.cells[r][c].terrain_type();
 		if tt.is_none()
@@ -871,6 +873,109 @@ impl Map
 				break;
 			}
 		}
+	}
+
+	fn force_merge_cell(&mut self, r: usize, c: usize, rng: &mut fastrand::Rng)
+	{
+		let terrain_type = self.cells[r][c].terrain_type();
+		let mut adjacents = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+		rng.shuffle(&mut adjacents);
+		for (dr, dc) in adjacents
+		{
+			if (r == 0 && dr < 0)
+				|| (c == 0 && dc < 0)
+				|| (r + 1 == GRID_SIZE && dr > 0)
+				|| (c + 1 == GRID_SIZE && dc > 0)
+			{
+				continue;
+			};
+			let rr = ((r as i32) + dr) as usize;
+			let cc = ((c as i32) + dc) as usize;
+			if (rr == 0 || rr == GRID_SIZE - 1)
+				&& (cc == 0 || cc == GRID_SIZE - 1)
+			{
+				continue;
+			}
+			if self.cells[rr][cc].terrain_type() == terrain_type
+			{
+				self.cells[r][c].contents = Contents::Merged {
+					parent_row: rr as u8,
+					parent_col: cc as u8,
+					is_occupied: false,
+				};
+				self.cells[rr][cc].make_more_important();
+				break;
+			}
+		}
+
+		// If we could not merge, cull it.
+		self.cells[r][c].contents = Contents::Culled { is_occupied: false };
+	}
+
+	fn calculate_cell_badness(&self, r: usize, c: usize) -> i8
+	{
+		let cell = &self.cells[r][c];
+		let terrain_type = cell.terrain_type();
+		let mut num_too_close: usize = 0;
+		let mut num_close_similar: usize = 0;
+		let mut num_close_different: usize = 0;
+		for dr in -DBR_BBOX_RADIUS..=DBR_BBOX_RADIUS
+		{
+			for dc in -DBR_BBOX_RADIUS..=DBR_BBOX_RADIUS
+			{
+				if dr == 0 && dc == 0
+				{
+					continue;
+				}
+				let rr = r as i32 + dr;
+				let cc = c as i32 + dc;
+				if rr < 0
+					|| cc < 0 || (rr as usize > GRID_SIZE - 1)
+					|| (cc as usize > GRID_SIZE - 1)
+				{
+					continue;
+				}
+				let rr = rr as usize;
+				let cc = cc as usize;
+				let other = &self.cells[rr][cc];
+				match other.contents
+				{
+					Contents::Terrain { .. } => (),
+					_ => continue,
+				}
+				let dx = (other.centroid_x as i32) - (cell.centroid_x as i32);
+				let dy = (other.centroid_y as i32) - (cell.centroid_y as i32);
+				if dx * dx + dy * dy
+					> MAX_DISTANCE_BETWEEN_REGIONS
+						* MAX_DISTANCE_BETWEEN_REGIONS
+				{
+					continue;
+				}
+				if dx * dx + dy * dy
+					< MIN_DISTANCE_BETWEEN_REGIONS
+						* MIN_DISTANCE_BETWEEN_REGIONS
+				{
+					num_too_close += 1;
+				}
+				if other.terrain_type() == terrain_type
+				{
+					num_close_similar += 1;
+				}
+				else
+				{
+					num_close_different += 1;
+				}
+			}
+		}
+		let mut badness: i8 = 10;
+		if r == 0 || c == 0 || r == GRID_SIZE - 1 || c == GRID_SIZE - 1
+		{
+			badness += 5;
+		}
+		badness -= std::cmp::min(num_close_different, 4) as i8;
+		badness += std::cmp::min(num_close_similar, 4) as i8;
+		badness += 10 * (std::cmp::min(num_too_close, 8) as i8);
+		badness
 	}
 }
 

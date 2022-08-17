@@ -26,7 +26,10 @@ const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
 const DBR_BBOX_RADIUS: i32 = 4;
 
 const NOISE_OCTAVES: i32 = 5;
-const NOISE_AMPLITUDE: f64 = 50.0;
+const NOISE_AMPLITUDE_ELEVATION: f64 = 50.0;
+const NOISE_AMPLITUDE_ELEVATION_MAGIC: f64 = 25.0;
+const NOISE_AMPLITUDE_FOREST: f64 = 50.0;
+const NOISE_AMPLITUDE_OCCUPATION: f64 = 50.0;
 const NOISE_FREQUENCY_ELEVATION: f64 = 1.0;
 const NOISE_FREQUENCY_FOREST: f64 = 1.0;
 const NOISE_FREQUENCY_OCCUPATION: f64 = 2.0;
@@ -35,7 +38,7 @@ const NOISE_PERSISTENCE_FOREST: f64 = 2.0;
 const NOISE_PERSISTENCE_OCCUPATION: f64 = 2.0;
 const NOISE_LACUNARITY: f64 = 2.0;
 const NOISE_SCALE: (f64, f64) = (MAP_SIZE as f64, MAP_SIZE as f64);
-const NOISE_BIAS_ELEVATION: f64 = 45.0;
+const NOISE_BIAS_ELEVATION: f64 = 35.0;
 const NOISE_BIAS_FOREST: f64 = 0.0;
 const NOISE_BIAS_OCCUPATION: f64 = 0.0;
 
@@ -93,20 +96,11 @@ impl Map
 	pub fn generate(&mut self, rng: &mut fastrand::Rng)
 	{
 		let seed = rng.u16(..) as i32;
-		let elevation = PerlinNoise2D::new(
-			NOISE_OCTAVES,
-			NOISE_AMPLITUDE,
-			NOISE_FREQUENCY_ELEVATION,
-			NOISE_PERSISTENCE_ELEVATION,
-			NOISE_LACUNARITY,
-			NOISE_SCALE,
-			NOISE_BIAS_ELEVATION,
-			seed,
-		);
+		let elevation = generate_elevation_noise(seed);
 		let seed = rng.u16(..) as i32;
 		let forest = PerlinNoise2D::new(
 			NOISE_OCTAVES,
-			NOISE_AMPLITUDE,
+			NOISE_AMPLITUDE_FOREST,
 			NOISE_FREQUENCY_FOREST,
 			NOISE_PERSISTENCE_FOREST,
 			NOISE_LACUNARITY,
@@ -117,7 +111,7 @@ impl Map
 		let seed = rng.u16(..) as i32;
 		self.occupation_noise = Some(PerlinNoise2D::new(
 			NOISE_OCTAVES,
-			NOISE_AMPLITUDE,
+			NOISE_AMPLITUDE_OCCUPATION,
 			NOISE_FREQUENCY_OCCUPATION,
 			NOISE_PERSISTENCE_OCCUPATION,
 			NOISE_LACUNARITY,
@@ -291,7 +285,7 @@ impl Map
 				.max_by_key(|(_i, badness)| *badness);
 			if let Some((offset, badness)) = worst
 			{
-				if badness < 20
+				if badness < 16
 				{
 					break;
 				}
@@ -479,7 +473,7 @@ impl Map
 					{
 						draw_on_bitmap(&mut self.ink_bitmap, x, y);
 					}
-					Contents::Culled { .. } if true =>
+					Contents::Culled { .. } if false =>
 					{
 						draw_on_bitmap(&mut self.ink_bitmap, x, y);
 					}
@@ -1680,5 +1674,71 @@ fn pick_random_centroid_xy_at_rc(
 		std::cmp::max(GRID_CELL_SIZE / 2 + padding, y),
 		MAP_SIZE - 1 - padding - GRID_CELL_SIZE / 2,
 	);
+	let x = (x / PROP_GRID_CELL_SIZE) * PROP_GRID_CELL_SIZE
+		+ PROP_GRID_CELL_SIZE / 2;
+	let y = (y / PROP_GRID_CELL_SIZE) * PROP_GRID_CELL_SIZE
+		+ PROP_GRID_CELL_SIZE / 2;
 	(x, y)
+}
+
+fn generate_elevation_noise(seed: i32) -> PerlinNoise2D
+{
+	let mut elevation = PerlinNoise2D::new(
+		NOISE_OCTAVES,
+		NOISE_AMPLITUDE_ELEVATION,
+		NOISE_FREQUENCY_ELEVATION,
+		NOISE_PERSISTENCE_ELEVATION,
+		NOISE_LACUNARITY,
+		NOISE_SCALE,
+		NOISE_BIAS_ELEVATION,
+		seed,
+	);
+	let mut total = 0.0;
+	for r in 0..GRID_SIZE
+	{
+		for c in 0..GRID_SIZE
+		{
+			let x = c * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+			let y = r * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+			let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+			total += e;
+		}
+	}
+	let n = (GRID_SIZE * GRID_SIZE) as f64;
+	let average = total / n;
+	let mut spread = 0.0;
+	for r in 0..GRID_SIZE
+	{
+		for c in 0..GRID_SIZE
+		{
+			let x = c * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+			let y = r * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+			let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+			let difference = e - average;
+			spread += difference * difference;
+		}
+	}
+	let variance = spread / n;
+	let standard_deviation = variance.sqrt();
+	// Adjust the amplitude to make sure the variance is "nice".
+	elevation.set_amplitude(
+		NOISE_AMPLITUDE_ELEVATION * NOISE_AMPLITUDE_ELEVATION_MAGIC
+			/ standard_deviation,
+	);
+	// Recalculate the average because we changed the amplitude and the average
+	// wasn't centered on 0.
+	total = 0.0;
+	for r in 0..GRID_SIZE
+	{
+		for c in 0..GRID_SIZE
+		{
+			let x = c * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+			let y = r * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
+			let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
+			total += e;
+		}
+	}
+	let average = total / n;
+	elevation.set_bias(2.0 * NOISE_BIAS_ELEVATION - average);
+	elevation
 }

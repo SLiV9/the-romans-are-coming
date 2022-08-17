@@ -602,6 +602,57 @@ impl Map
 				}
 			}
 		}
+		// Merge abandoned props on the edges of regions.
+		for _i in 0..5
+		{
+			let mut any = false;
+			for v in 0..PROP_GRID_SIZE
+			{
+				for u in 0..PROP_GRID_SIZE
+				{
+					let offset = v * PROP_GRID_SIZE + u;
+					if self.prop_region_map[offset] != 0
+					{
+						continue;
+					}
+					let terrain_type =
+						get_from_propmap(&self.surface_propmap, u, v);
+					if terrain_type.is_none()
+					{
+						continue;
+					}
+					let mut adjacents = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+					rng.shuffle(&mut adjacents);
+					for (dv, du) in adjacents
+					{
+						if (v == 0 && dv < 0)
+							|| (u == 0 && du < 0) || (v + 1 == PROP_GRID_SIZE
+							&& dv > 0) || (u + 1 == PROP_GRID_SIZE && du > 0)
+						{
+							continue;
+						};
+						let uu = ((u as i32) + du) as usize;
+						let vv = ((v as i32) + dv) as usize;
+						let otheroffset = vv * PROP_GRID_SIZE + uu;
+						if self.prop_region_map[otheroffset] == 0
+						{
+							continue;
+						}
+						if get_from_propmap(&self.surface_propmap, uu, vv)
+							== terrain_type
+						{
+							self.prop_region_map[offset] =
+								self.prop_region_map[otheroffset];
+							any = true;
+						}
+					}
+				}
+			}
+			if !any
+			{
+				break;
+			}
+		}
 		// Mock up some roman occupation.
 		// TODO remove
 		for r in 0..GRID_SIZE

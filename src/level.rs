@@ -10,6 +10,7 @@ use crate::global_state::Wrapper;
 use crate::map::Map;
 use crate::map::MAX_NUM_REGIONS;
 use crate::palette;
+use crate::sprites;
 
 use fastrand;
 
@@ -128,7 +129,6 @@ impl Level
 			map.draw();
 		}
 
-		if true
 		{
 			unsafe { *DRAW_COLORS = 0x11 };
 			rect(0, 0, 160, 10);
@@ -138,8 +138,42 @@ impl Level
 			unsafe { *DRAW_COLORS = 0x10 };
 			rect(1, 0, 33, 9);
 
+			let mut x = -2;
+			unsafe { *DRAW_COLORS = 0x3210 };
+			sprites::draw_score_icon(x, 0);
+			x += 9;
 			unsafe { *DRAW_COLORS = 3 };
-			text("0000", 2, 1);
+			text("000", x, 1);
+			x += 3 * 8 + 4;
+			unsafe { *DRAW_COLORS = 0x3210 };
+			sprites::draw_grain_icon(x, 0);
+			x += 8;
+			unsafe { *DRAW_COLORS = 3 };
+			text("00", x, 1);
+			x += 2 * 8 + 2;
+			unsafe { *DRAW_COLORS = 0x3210 };
+			sprites::draw_wood_icon(x, 0);
+			x += 8;
+			unsafe { *DRAW_COLORS = 3 };
+			text("00", x, 1);
+			x += 2 * 8 + 2;
+			unsafe { *DRAW_COLORS = 0x3210 };
+			sprites::draw_wine_icon(x, 0);
+			x += 8;
+			unsafe { *DRAW_COLORS = 3 };
+			text("00", x, 1);
+			x += 2 * 8 + 2;
+			unsafe { *DRAW_COLORS = 0x3210 };
+			sprites::draw_gold_icon(x, 0);
+			x += 9;
+			unsafe { *DRAW_COLORS = 3 };
+			text("00", x, 1);
+			x = (SCREEN_SIZE as i32) - 18;
+			unsafe { *DRAW_COLORS = 0x3210 };
+			sprites::draw_wreath_icon(x, 0);
+			x += 9;
+			unsafe { *DRAW_COLORS = 3 };
+			text("0", x, 1);
 		}
 	}
 }

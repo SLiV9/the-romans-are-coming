@@ -4,7 +4,7 @@ Game design:
 
 Mechanics:
   ✔ Basic map generation @done (2022-08-15 18:42)
-  ☐ Click on map regions
+  ✔ Click on map regions @done (2022-08-18 12:45)
   ✔ Highlight region with color when hovered @done (2022-08-17 14:23)
   ☐ Highlight relevant regions when hovering resource bar
   ☐ Gather resources
@@ -15,6 +15,7 @@ Mechanics:
 
 Content:
   ✔ Fancy map generation @done (2022-08-17 21:49)
+    ☐ Regions zonder props cullen
   ☐ Mini-objectives
   ☐ Imperial decrees
     ☐ Detect when placement is impossible
@@ -26,11 +27,12 @@ Sprites:
     ✔ Trees @done (2022-08-15 18:42)
     ✔ Hills @done (2022-08-15 18:42)
     ✔ Mountains @done (2022-08-15 18:42)
-    ☐ Waves
-      ☐ Add a tiny wave animation when placing a boat in water
+    ✘ Waves @cancelled (2022-08-18 12:45)
+      ✘ Add a tiny wave animation when placing a boat in water @cancelled (2022-08-18 12:45)
     ✔ Boats @done (2022-08-15 18:42)
     ☐ Houses
-    ☐ Battlefields/graves
+    ✔ Battlefields/graves @done (2022-08-18 12:45)
+      ☐ Dustclouds when fighting occurs
   ☐ Resource icons
     ☐ Grain
     ☐ Wood

@@ -6,11 +6,16 @@
 
 use crate::wasm4::*;
 
+use crate::level::Marker;
+use crate::level::TerrainType;
 use crate::palette;
 use crate::sprites;
 
 use fastrand;
 use perlin2d::PerlinNoise2D;
+
+pub const MIN_NUM_REGIONS: usize = 25;
+pub const MAX_NUM_REGIONS: usize = 35;
 
 pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
@@ -49,7 +54,7 @@ const FOREST_THRESHOLD_ON_HILL: f64 = 10.0;
 const FOREST_THRESHOLD_ON_GRASS: f64 = 200.0;
 
 const MAP_X: i32 = 0;
-const MAP_Y: i32 = 5;
+const MAP_Y: i32 = 7;
 
 pub struct Map
 {
@@ -63,16 +68,6 @@ pub struct Map
 	prop_region_map: [u8; PROP_REGION_MAP_SIZE],
 	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
 	occupation_noise: Option<PerlinNoise2D>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TerrainType
-{
-	Grass,
-	Forest,
-	Hill,
-	Mountain,
-	Water,
 }
 
 impl Map
@@ -276,7 +271,7 @@ impl Map
 				}
 			}
 		}
-		while num_candidates > 25
+		while num_candidates > MIN_NUM_REGIONS
 		{
 			let worst = cell_badness
 				.iter()
@@ -285,7 +280,7 @@ impl Map
 				.max_by_key(|(_i, badness)| *badness);
 			if let Some((offset, badness)) = worst
 			{
-				if badness < 16
+				if badness < 16 && num_candidates <= MAX_NUM_REGIONS
 				{
 					break;
 				}
@@ -348,6 +343,7 @@ impl Map
 						cell.contents = Contents::Region {
 							terrain_type,
 							region_id: num_regions as u8,
+							marker: None,
 							is_occupied: false,
 						};
 					}
@@ -468,6 +464,11 @@ impl Map
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y);
 						draw_on_bitmap(&mut self.ink_bitmap, x, y + 1);
 						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 1);
+						draw_on_bitmap(&mut self.ink_bitmap, x - 1, y);
+						draw_on_bitmap(&mut self.ink_bitmap, x, y + 2);
+						draw_on_bitmap(&mut self.ink_bitmap, x - 1, y + 2);
+						draw_on_bitmap(&mut self.ink_bitmap, x + 1, y + 2);
+						draw_on_bitmap(&mut self.ink_bitmap, x - 1, y + 1);
 					}
 					Contents::Subregion { .. } if false =>
 					{
@@ -647,37 +648,9 @@ impl Map
 				break;
 			}
 		}
-		// Mock up some roman occupation.
-		// TODO remove
-		for r in 0..GRID_SIZE
-		{
-			for c in 0..4
-			{
-				let cell = &mut self.cells[r][c];
-				match cell.contents
-				{
-					Contents::Region { .. } =>
-					{
-						if (c <= 2) || rng.bool()
-						{
-							cell.become_occupied();
-						}
-					}
-					Contents::Subregion { .. } | Contents::Culled { .. } =>
-					{
-						if c <= 2
-						{
-							cell.become_occupied();
-						}
-					}
-					_ => (),
-				}
-			}
-		}
-		self.update_occupation();
 	}
 
-	pub fn update_occupation(&mut self)
+	fn update_occupation(&mut self)
 	{
 		// TODO only update a subsection if we know where the update took place
 		for y in 0..MAP_SIZE
@@ -740,6 +713,51 @@ impl Map
 				else
 				{
 					erase_on_bitmap(&mut self.occupation_bitmap, x, y);
+				}
+			}
+		}
+	}
+
+	pub fn regions(&self) -> impl Iterator<Item = (u8, TerrainType)> + '_
+	{
+		(0..(GRID_SIZE * GRID_SIZE))
+			.map(|i| (i / GRID_SIZE, i % GRID_SIZE))
+			.filter_map(|(r, c)| match self.cells[r][c].contents
+			{
+				Contents::Region {
+					region_id,
+					terrain_type,
+					marker: _,
+					is_occupied: _,
+				} => Some((region_id, terrain_type)),
+				Contents::Subregion { .. } => None,
+				Contents::Culled { .. } => None,
+				_ => None,
+			})
+	}
+
+	pub fn set_marker_in_region(
+		&mut self,
+		region_id: u8,
+		marker: Option<Marker>,
+	)
+	{
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				match &mut self.cells[r][c].contents
+				{
+					Contents::Region {
+						region_id: r,
+						marker: m,
+						..
+					} if *r == region_id =>
+					{
+						*m = marker;
+						return;
+					}
+					_ => (),
 				}
 			}
 		}
@@ -858,18 +876,10 @@ impl Map
 				{
 					Contents::Region {
 						terrain_type: TerrainType::Water,
-						region_id,
-						is_occupied: _,
+						..
 					} =>
 					{
-						if hovered_region_id == Some(region_id)
-						{
-							unsafe { *DRAW_COLORS = 0x4320 };
-						}
-						else
-						{
-							unsafe { *DRAW_COLORS = 0x1320 };
-						}
+						unsafe { *DRAW_COLORS = 0x1320 };
 						sprites::draw_boat(
 							MAP_X + (cell.centroid_x as i32),
 							MAP_Y + (cell.centroid_y as i32),
@@ -923,6 +933,34 @@ impl Map
 				}
 			}
 		}
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				let cell = &self.cells[r][c];
+				match cell.contents
+				{
+					Contents::Region {
+						marker: Some(marker),
+						..
+					} =>
+					{
+						let flag = match marker
+						{
+							Marker::Roman => 0,
+							Marker::DeadRoman => 1,
+							Marker::Worker => 2,
+							Marker::DeadWorker => 3,
+						};
+						let x = MAP_X + cell.centroid_x as i32;
+						let y = MAP_Y + cell.centroid_y as i32 - 1;
+						unsafe { *DRAW_COLORS = 0x3210 };
+						sprites::draw_flag(x, y, flag);
+					}
+					_ => (),
+				}
+			}
+		}
 	}
 
 	pub fn determine_hovered_region_id(&self) -> Option<u8>
@@ -940,6 +978,7 @@ impl Map
 			Contents::Region {
 				region_id,
 				terrain_type,
+				marker: _,
 				is_occupied,
 			}
 			| Contents::Subregion {
@@ -956,7 +995,7 @@ impl Map
 				{
 					match terrain_type
 					{
-						TerrainType::Water => palette::WATER,
+						TerrainType::Water => palette::DEFAULT,
 						TerrainType::Mountain => palette::SNOW,
 						TerrainType::Hill => palette::WINE,
 						TerrainType::Forest => palette::NATURE,
@@ -1389,6 +1428,7 @@ enum Contents
 	{
 		region_id: u8,
 		terrain_type: TerrainType,
+		marker: Option<Marker>,
 		is_occupied: bool,
 	},
 	Subregion

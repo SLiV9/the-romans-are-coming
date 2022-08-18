@@ -22,7 +22,7 @@ use menu::Menu;
 
 static GAME: Wrapper<Game> = Wrapper::new(Game::Loading);
 
-const QUICK_TEST: bool = false;
+const QUICK_TEST: bool = true;
 
 enum Game
 {

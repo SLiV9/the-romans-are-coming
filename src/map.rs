@@ -790,6 +790,16 @@ impl Map
 			}
 		}
 
+		unsafe { *DRAW_COLORS = 0x20 };
+		blit(
+			&self.surface_bitmap,
+			MAP_X,
+			MAP_Y,
+			MAP_SIZE as u32,
+			MAP_SIZE as u32,
+			BLIT_1BPP,
+		);
+
 		unsafe { *DRAW_COLORS = 0x40 };
 		if hovered_region_id.is_some() || highlighted_terrain_type.is_some()
 		{
@@ -810,34 +820,24 @@ impl Map
 					let y = MAP_Y + (v * PROP_GRID_CELL_SIZE) as i32;
 					let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
 					let tt = get_from_propmap(&self.surface_propmap, u, v);
-					match tt
+					if hovered_region_id == Some(region_id)
+						|| tt == highlighted_terrain_type
 					{
-						Some(TerrainType::Mountain)
-						| Some(TerrainType::Hill)
-						| Some(TerrainType::Forest)
-						| Some(TerrainType::Grass) =>
+						match tt
 						{
-							if hovered_region_id == Some(region_id)
-								|| tt == highlighted_terrain_type
+							Some(TerrainType::Mountain)
+							| Some(TerrainType::Hill)
+							| Some(TerrainType::Grass) =>
 							{
 								sprites::draw_surface(x, y, alt);
 							}
+							_ => (),
 						}
-						_ => (),
 					}
 				}
 			}
 		}
 
-		unsafe { *DRAW_COLORS = 0x20 };
-		blit(
-			&self.surface_bitmap,
-			MAP_X,
-			MAP_Y,
-			MAP_SIZE as u32,
-			MAP_SIZE as u32,
-			BLIT_1BPP,
-		);
 		unsafe { *DRAW_COLORS = 0x20 };
 		blit(
 			&self.water_bitmap,
@@ -960,7 +960,11 @@ impl Map
 					}
 					Some(TerrainType::Grass) =>
 					{
-						if alt < 25 && (u + v) % 2 > 0
+						// TODO find a less hacky way to detect this?
+						let is_placing_roman =
+							hovered_region_id == Some(region_id)
+								&& unsafe { *PALETTE == crate::palette::BLOOD };
+						if alt < 25 && (u + v) % 2 > 0 && !is_placing_roman
 						{
 							sprites::draw_grass(x, y, alt);
 						}
@@ -992,6 +996,17 @@ impl Map
 						let y = MAP_Y + cell.centroid_y as i32 - 1;
 						unsafe { *DRAW_COLORS = 0x3210 };
 						sprites::draw_flag(x, y, flag);
+					}
+					Contents::Region {
+						region_id,
+						marker: None,
+						..
+					} if hovered_region_id == Some(region_id) =>
+					{
+						let x = MAP_X + cell.centroid_x as i32;
+						let y = MAP_Y + cell.centroid_y as i32 + 1;
+						unsafe { *DRAW_COLORS = 0x34 };
+						rect(x - 2, y - 2, 5, 5);
 					}
 					_ => (),
 				}

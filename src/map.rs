@@ -8,13 +8,11 @@ use crate::wasm4::*;
 
 use crate::level::Marker;
 use crate::level::TerrainType;
+use crate::level::MAX_NUM_REGIONS;
 use crate::sprites;
 
 use fastrand;
 use perlin2d::PerlinNoise2D;
-
-pub const MIN_NUM_REGIONS: usize = 25;
-pub const MAX_NUM_REGIONS: usize = 35;
 
 pub const MAP_SIZE: usize = 160;
 pub const BITMAP_SIZE: usize = MAP_SIZE * MAP_SIZE / 8;
@@ -23,7 +21,6 @@ pub const GRID_CELL_SIZE: usize = MAP_SIZE / GRID_SIZE;
 pub const PROP_GRID_SIZE: usize = 40;
 pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
 pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
-pub const PROP_REGION_MAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE;
 
 const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
 const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
@@ -64,7 +61,7 @@ pub struct Map
 	occupation_bitmap: [u8; BITMAP_SIZE],
 	propmap: [u8; PROPMAP_SIZE],
 	surface_propmap: [u8; PROPMAP_SIZE],
-	prop_region_map: [u8; PROP_REGION_MAP_SIZE],
+	prop_region_map: [[i8; PROP_GRID_SIZE]; PROP_GRID_SIZE],
 	cells: [[Cell; GRID_SIZE]; GRID_SIZE],
 	occupation_noise: Option<PerlinNoise2D>,
 }
@@ -81,13 +78,13 @@ impl Map
 			occupation_bitmap: [0; BITMAP_SIZE],
 			propmap: [0; PROPMAP_SIZE],
 			surface_propmap: [0; PROPMAP_SIZE],
-			prop_region_map: [0; PROP_REGION_MAP_SIZE],
+			prop_region_map: [[0; PROP_GRID_SIZE]; PROP_GRID_SIZE],
 			cells: [[EMPTY_CELL; GRID_SIZE]; GRID_SIZE],
 			occupation_noise: None,
 		}
 	}
 
-	pub fn generate(&mut self, rng: &mut fastrand::Rng)
+	pub fn generate(&mut self, min_num_regions: usize, rng: &mut fastrand::Rng)
 	{
 		let seed = rng.u16(..) as i32;
 		let elevation = generate_elevation_noise(seed);
@@ -270,7 +267,7 @@ impl Map
 				}
 			}
 		}
-		while num_candidates > MIN_NUM_REGIONS
+		while num_candidates > min_num_regions
 		{
 			let worst = cell_badness
 				.iter()
@@ -338,13 +335,13 @@ impl Map
 						merge_importance: _,
 					} =>
 					{
-						num_regions += 1;
 						cell.contents = Contents::Region {
 							terrain_type,
-							region_id: num_regions as u8,
+							region_id: num_regions,
 							marker: None,
 							is_occupied: false,
 						};
+						num_regions += 1;
 					}
 					_ => (),
 				}
@@ -537,6 +534,7 @@ impl Map
 				};
 				set_on_propmap(&mut self.propmap, u, v, prop_type);
 				set_on_propmap(&mut self.surface_propmap, u, v, terrain_type);
+				self.prop_region_map[v][u] = -1;
 				if terrain_type.is_none()
 				{
 					continue;
@@ -559,8 +557,7 @@ impl Map
 					{
 						if Some(tt) == terrain_type
 						{
-							let offset = v * PROP_GRID_SIZE + u;
-							self.prop_region_map[offset] = region_id;
+							self.prop_region_map[v][u] = region_id;
 						}
 					}
 					_ => (),
@@ -604,8 +601,7 @@ impl Map
 			{
 				for u in 0..PROP_GRID_SIZE
 				{
-					let offset = v * PROP_GRID_SIZE + u;
-					if self.prop_region_map[offset] != 0
+					if self.prop_region_map[v][u] >= 0
 					{
 						continue;
 					}
@@ -627,16 +623,15 @@ impl Map
 						};
 						let uu = ((u as i32) + du) as usize;
 						let vv = ((v as i32) + dv) as usize;
-						let otheroffset = vv * PROP_GRID_SIZE + uu;
-						if self.prop_region_map[otheroffset] == 0
+						if self.prop_region_map[vv][uu] < 0
 						{
 							continue;
 						}
 						if get_from_propmap(&self.surface_propmap, uu, vv)
 							== terrain_type
 						{
-							self.prop_region_map[offset] =
-								self.prop_region_map[otheroffset];
+							self.prop_region_map[v][u] =
+								self.prop_region_map[vv][uu];
 							any = true;
 						}
 					}
@@ -649,9 +644,8 @@ impl Map
 		}
 	}
 
-	fn update_occupation(&mut self)
+	pub fn update_occupation_map(&mut self)
 	{
-		// TODO only update a subsection if we know where the update took place
 		for y in 0..MAP_SIZE
 		{
 			for x in 0..MAP_SIZE
@@ -717,7 +711,7 @@ impl Map
 		}
 	}
 
-	pub fn regions(&self) -> impl Iterator<Item = (u8, TerrainType)> + '_
+	pub fn regions(&self) -> impl Iterator<Item = (i8, TerrainType)> + '_
 	{
 		(0..(GRID_SIZE * GRID_SIZE))
 			.map(|i| (i / GRID_SIZE, i % GRID_SIZE))
@@ -735,9 +729,51 @@ impl Map
 			})
 	}
 
+	pub fn fill_adjacency_bits(
+		&self,
+		adjacency_bits: &mut [u64; MAX_NUM_REGIONS],
+	)
+	{
+		for v in 0..PROP_GRID_SIZE
+		{
+			for u in 0..PROP_GRID_SIZE
+			{
+				let i = self.prop_region_map[v][u];
+				if i < 0
+				{
+					continue;
+				}
+				if u > 0
+				{
+					let j = self.prop_region_map[v][u - 1];
+					if i != j && j >= 0
+					{
+						adjacency_bits[i as usize] |= 0b1 << j;
+						adjacency_bits[j as usize] |= 0b1 << i;
+					}
+				}
+				if v > 0
+				{
+					let j = self.prop_region_map[v - 1][u];
+					if i != j && j >= 0
+					{
+						adjacency_bits[i as usize] |= 0b1 << j;
+						adjacency_bits[j as usize] |= 0b1 << i;
+					}
+				}
+				if u == 0
+					|| v == 0 || u == PROP_GRID_SIZE - 1
+					|| v == PROP_GRID_SIZE - 1
+				{
+					adjacency_bits[i as usize] |= 0b1 << 63;
+				}
+			}
+		}
+	}
+
 	pub fn set_marker_in_region(
 		&mut self,
-		region_id: u8,
+		region_id: i8,
 		marker: Option<Marker>,
 	)
 	{
@@ -762,9 +798,41 @@ impl Map
 		}
 	}
 
+	pub fn occupy_region(&mut self, region_id: i8)
+	{
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				match &mut self.cells[r][c].contents
+				{
+					Contents::Region {
+						region_id: r,
+						is_occupied,
+						..
+					} if *r == region_id =>
+					{
+						*is_occupied = true;
+					}
+					Contents::Subregion {
+						parent_region_id: r,
+						is_occupied,
+						..
+					} if *r == region_id =>
+					{
+						*is_occupied = true;
+					}
+					_ => (),
+				}
+			}
+		}
+		// TODO occupy combined mountain range if it is completely surrounded
+		// TODO occupy culled regions if they are adjacent
+	}
+
 	pub fn draw(
 		&self,
-		hovered_region_id: Option<u8>,
+		hovered_region_id: Option<i8>,
 		highlighted_terrain_type: Option<TerrainType>,
 	)
 	{
@@ -807,9 +875,8 @@ impl Map
 			{
 				for u in 0..PROP_GRID_SIZE
 				{
-					let offset = v * PROP_GRID_SIZE + u;
-					let region_id = self.prop_region_map[offset];
-					if region_id == 0
+					let region_id = self.prop_region_map[v][u];
+					if region_id < 0
 						|| !is_empty[region_id as usize]
 						|| (highlighted_terrain_type.is_none()
 							&& hovered_region_id != Some(region_id))
@@ -926,10 +993,9 @@ impl Map
 		{
 			for u in 0..PROP_GRID_SIZE
 			{
-				let offset = v * PROP_GRID_SIZE + u;
-				let region_id = self.prop_region_map[offset];
+				let region_id = self.prop_region_map[v][u];
 				let terrain_type = get_from_propmap(&self.propmap, u, v);
-				if region_id != 0
+				if region_id >= 0
 					&& is_empty[region_id as usize]
 					&& (hovered_region_id == Some(region_id)
 						|| highlighted_terrain_type == terrain_type)
@@ -991,6 +1057,7 @@ impl Map
 							Marker::DeadRoman => 1,
 							Marker::Worker => 2,
 							Marker::DeadWorker => 3,
+							Marker::Occupied => 0,
 						};
 						let x = MAP_X + cell.centroid_x as i32;
 						let y = MAP_Y + cell.centroid_y as i32 - 1;
@@ -1014,7 +1081,7 @@ impl Map
 		}
 	}
 
-	pub fn determine_hovered_region_id(&self) -> Option<u8>
+	pub fn determine_hovered_region_id(&self) -> Option<i8>
 	{
 		let (mouse_x, mouse_y): (i16, i16) = unsafe { (*MOUSE_X, *MOUSE_Y) };
 		let x = (mouse_x as i32) - MAP_X;
@@ -1387,7 +1454,7 @@ impl Map
 		badness
 	}
 
-	fn find_parent_region_id(&self, r: usize, c: usize) -> Option<u8>
+	fn find_parent_region_id(&self, r: usize, c: usize) -> Option<i8>
 	{
 		let mut rr = r;
 		let mut cc = c;
@@ -1451,14 +1518,14 @@ enum Contents
 	},
 	Region
 	{
-		region_id: u8,
+		region_id: i8,
 		terrain_type: TerrainType,
 		marker: Option<Marker>,
 		is_occupied: bool,
 	},
 	Subregion
 	{
-		parent_region_id: u8,
+		parent_region_id: i8,
 		parent_terrain_type: TerrainType,
 		is_occupied: bool,
 	},

@@ -8,12 +8,12 @@ use crate::wasm4::*;
 
 use crate::global_state::Wrapper;
 use crate::map::Map;
-use crate::map::MAX_NUM_REGIONS;
 use crate::palette;
 use crate::sprites;
 
 use fastrand;
 
+pub const MAX_NUM_REGIONS: usize = 35;
 pub const MAX_NUM_CARDS: usize = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +33,7 @@ pub enum Marker
 	DeadWorker,
 	Roman,
 	DeadRoman,
+	Occupied,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,12 +64,12 @@ enum Preview
 	},
 	PlaceWorker
 	{
-		region_id: u8,
+		region_id: i8,
 		terrain_type: TerrainType,
 	},
 	PlaceRoman
 	{
-		region_id: u8,
+		region_id: i8,
 	},
 	CannotPlaceRoman,
 	Shuffle,
@@ -81,8 +82,8 @@ const UI_X_GOLD: i32 = 113;
 
 pub struct Level
 {
-	region_data: [Region; MAX_NUM_REGIONS + 1],
-	// TODO adjacency
+	region_data: [Region; MAX_NUM_REGIONS],
+	adjacency_bits: [u64; MAX_NUM_REGIONS],
 	card_deck: [Card; MAX_NUM_CARDS],
 	num_regions: u8,
 	num_cards: u8,
@@ -104,26 +105,45 @@ impl Level
 {
 	pub fn new(seed: u64) -> Level
 	{
+		// TODO increase number of regions during the tutorial
+		let min_num_regions = 25;
 		let mut num_regions = 0;
-		let mut region_data = [EMPTY_REGION; MAX_NUM_REGIONS + 1];
+		let mut region_data = [EMPTY_REGION; MAX_NUM_REGIONS];
+		let mut adjacency_bits = [0; MAX_NUM_REGIONS];
 		let mut rng = fastrand::Rng::with_seed(seed);
 		{
 			// TODO do this more cleanly?
 			let map = MAP.get_mut();
-			map.generate(&mut rng);
+			map.generate(min_num_regions, &mut rng);
 			for (id, terrain_type) in map.regions()
 			{
-				num_regions += 1;
 				region_data[id as usize] = Region {
 					terrain_type,
 					marker: None,
 				};
+				num_regions += 1;
+			}
+			map.fill_adjacency_bits(&mut adjacency_bits);
+			let cutoff = rng.usize(0..(num_regions as usize));
+			let roman_spawn = (0..(num_regions as usize))
+				.filter(|i| *i >= cutoff)
+				.filter(|i| (adjacency_bits[*i as usize] & (0b1 << 63)) != 0)
+				.map(|i| i as i8)
+				.next();
+			if let Some(region_id) = roman_spawn
+			{
+				map.occupy_region(region_id);
+				map.update_occupation_map();
+				let marker = Marker::Occupied;
+				region_data[region_id as usize].marker = Some(marker);
+				map.set_marker_in_region(region_id, Some(marker));
 			}
 		}
 		let threat_level = 1;
 		Level {
 			num_regions,
 			region_data,
+			adjacency_bits,
 			num_cards: 0,
 			card_offset: 0,
 			card_deck: [Card::Worker; MAX_NUM_CARDS],

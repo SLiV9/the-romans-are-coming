@@ -7,7 +7,7 @@ Mechanics:
   ✔ Click on map regions @done (2022-08-18 12:45)
   ✔ Highlight region with color when hovered @done (2022-08-17 14:23)
   ☐ Highlight relevant regions when hovering resource bar
-  ☐ Gather resources
+  ✔ Gather resources @done (2022-08-18 15:17)
   ☐ Create fights
     ☐ Preview fights when hovered
   ☐ Create cities
@@ -51,6 +51,8 @@ Audio:
 Usability:
   ☐ Keyboard controls
   ☐ Volume options 0/50%/100%
+  ☐ High contrast mode (in particular the two shades of paper)
+    ☐ Adjustable palette?
 
 Polish:
   ☐ Itch.io page

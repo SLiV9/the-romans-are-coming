@@ -985,26 +985,7 @@ impl Map
 				parent_region_id: region_id,
 				parent_terrain_type: terrain_type,
 				is_occupied,
-			} =>
-			{
-				let palette = if is_occupied
-				{
-					palette::DEFAULT
-				}
-				else
-				{
-					match terrain_type
-					{
-						TerrainType::Water => palette::DEFAULT,
-						TerrainType::Mountain => palette::SNOW,
-						TerrainType::Hill => palette::WINE,
-						TerrainType::Forest => palette::NATURE,
-						TerrainType::Grass => palette::GOLD,
-					}
-				};
-				unsafe { *PALETTE = palette };
-				Some(region_id)
-			}
+			} => Some(region_id),
 			_ => None,
 		}
 	}

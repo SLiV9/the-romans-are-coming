@@ -8,7 +8,6 @@ use crate::wasm4::*;
 
 use crate::level::Marker;
 use crate::level::TerrainType;
-use crate::palette;
 use crate::sprites;
 
 use fastrand;
@@ -53,7 +52,7 @@ const ELEVATION_THRESHOLD_WATER: f64 = 0.0;
 const FOREST_THRESHOLD_ON_HILL: f64 = 10.0;
 const FOREST_THRESHOLD_ON_GRASS: f64 = 200.0;
 
-const MAP_X: i32 = 0;
+const MAP_X: i32 = 2;
 const MAP_Y: i32 = 7;
 
 pub struct Map
@@ -763,7 +762,11 @@ impl Map
 		}
 	}
 
-	pub fn draw(&self, highlighted_terrain_type: Option<TerrainType>)
+	pub fn draw(
+		&self,
+		hovered_region_id: Option<u8>,
+		highlighted_terrain_type: Option<TerrainType>,
+	)
 	{
 		let mut is_empty = [false; MAX_NUM_REGIONS];
 		for r in 0..GRID_SIZE
@@ -786,8 +789,6 @@ impl Map
 				}
 			}
 		}
-
-		let hovered_region_id = self.determine_hovered_region_id();
 
 		unsafe { *DRAW_COLORS = 0x40 };
 		if hovered_region_id.is_some() || highlighted_terrain_type.is_some()

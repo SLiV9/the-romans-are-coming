@@ -14,6 +14,8 @@ use crate::sprites;
 
 use fastrand;
 
+pub const MAX_NUM_CARDS: usize = 20;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerrainType
 {
@@ -33,6 +35,13 @@ pub enum Marker
 	DeadRoman,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Card
+{
+	Worker,
+	Roman,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Region
 {
@@ -45,11 +54,12 @@ const EMPTY_REGION: Region = Region {
 	marker: None,
 };
 
+#[derive(Debug, Clone, Copy)]
 enum Preview
 {
 	HoverResource
 	{
-		terrain_type: TerrainType
+		terrain_type: TerrainType,
 	},
 	PlaceWorker
 	{
@@ -58,8 +68,10 @@ enum Preview
 	},
 	PlaceRoman
 	{
-		region_id: u8
+		region_id: u8,
 	},
+	CannotPlaceRoman,
+	Shuffle,
 }
 
 const UI_X_GRAIN: i32 = 35;
@@ -69,9 +81,12 @@ const UI_X_GOLD: i32 = 113;
 
 pub struct Level
 {
-	num_regions: usize,
 	region_data: [Region; MAX_NUM_REGIONS + 1],
 	// TODO adjacency
+	card_deck: [Card; MAX_NUM_CARDS],
+	num_regions: u8,
+	num_cards: u8,
+	card_offset: u8,
 	threat_level: u8,
 	grain: u8,
 	wood: u8,
@@ -105,10 +120,14 @@ impl Level
 				};
 			}
 		}
+		let threat_level = 1;
 		Level {
 			num_regions,
 			region_data,
-			threat_level: 0,
+			num_cards: 0,
+			card_offset: 0,
+			card_deck: [Card::Worker; MAX_NUM_CARDS],
+			threat_level,
 			grain: 0,
 			wood: 0,
 			wine: 0,
@@ -128,23 +147,57 @@ impl Level
 		// TODO do this more cleanly?
 		let map = MAP.get_mut();
 
+		let active_card = if self.card_offset < self.num_cards
+		{
+			Some(self.card_deck[self.card_offset as usize])
+		}
+		else
+		{
+			None
+		};
+
 		self.hover_preview = None;
 		let hovered_region_id = map.determine_hovered_region_id();
-		if let Some(region_id) = hovered_region_id
+		if active_card.is_none()
+		{
+			self.hover_preview = Some(Preview::Shuffle);
+		}
+		else if let Some(region_id) = hovered_region_id
 		{
 			let region = self.region_data[region_id as usize];
 			if region.marker.is_none()
 			{
-				let preview = match region.terrain_type
+				let preview = if active_card == Some(Card::Roman)
 				{
-					TerrainType::Grass
-					| TerrainType::Forest
-					| TerrainType::Hill
-					| TerrainType::Mountain => Some(Preview::PlaceWorker {
-						region_id,
-						terrain_type: region.terrain_type,
-					}),
-					TerrainType::Water => None,
+					let can_place = match region.terrain_type
+					{
+						TerrainType::Grass => true,
+						TerrainType::Forest => true,
+						TerrainType::Hill => true,
+						_ => false,
+					};
+					if can_place
+					{
+						Some(Preview::PlaceRoman { region_id })
+					}
+					else
+					{
+						None
+					}
+				}
+				else
+				{
+					match region.terrain_type
+					{
+						TerrainType::Grass
+						| TerrainType::Forest
+						| TerrainType::Hill
+						| TerrainType::Mountain => Some(Preview::PlaceWorker {
+							region_id,
+							terrain_type: region.terrain_type,
+						}),
+						_ => None,
+					}
 				};
 				self.hover_preview = preview;
 			}
@@ -171,59 +224,101 @@ impl Level
 			}
 		}
 
-		if hovered_region_id.is_some()
-			&& (mousebuttons & MOUSE_LEFT != 0)
+		if active_card == Some(Card::Roman) && self.hover_preview.is_none()
+		{
+			self.hover_preview = Some(Preview::CannotPlaceRoman);
+		}
+
+		if (mousebuttons & MOUSE_LEFT != 0)
 			&& (self.previous_mousebuttons & MOUSE_LEFT == 0)
 		{
-			let placed = match self.hover_preview
-			{
-				Some(Preview::PlaceWorker {
-					region_id,
-					terrain_type: TerrainType::Grass,
-				}) =>
-				{
-					self.grain += 1;
-					self.score += 1;
-					Some((region_id, Marker::Worker))
-				}
-				Some(Preview::PlaceWorker {
-					region_id,
-					terrain_type: TerrainType::Forest,
-				}) =>
-				{
-					self.wood += 1;
-					self.score += 1;
-					Some((region_id, Marker::Worker))
-				}
-				Some(Preview::PlaceWorker {
-					region_id,
-					terrain_type: TerrainType::Hill,
-				}) =>
-				{
-					self.wine += 1;
-					self.score += 1;
-					Some((region_id, Marker::Worker))
-				}
-				Some(Preview::PlaceWorker {
-					region_id,
-					terrain_type: TerrainType::Mountain,
-				}) =>
-				{
-					self.score += 1;
-					Some((region_id, Marker::Worker))
-				}
-				_ => None,
-			};
-			if let Some((region_id, marker)) = placed
-			{
-				self.region_data[region_id as usize].marker = Some(marker);
-				map.set_marker_in_region(region_id, Some(marker));
-			}
+			self.handle_click(map);
 		}
 
 		self.previous_gamepad = gamepad;
 		self.previous_mousebuttons = mousebuttons;
 		None
+	}
+
+	fn handle_click(&mut self, map: &mut Map)
+	{
+		let placed = match self.hover_preview
+		{
+			Some(Preview::Shuffle) =>
+			{
+				let num_workers = 5;
+				self.num_cards = num_workers + self.threat_level;
+				for i in 0..self.num_cards
+				{
+					let card = if i / 3 >= num_workers
+					{
+						Card::Roman
+					}
+					else if i / 3 >= self.threat_level
+					{
+						Card::Worker
+					}
+					else if i % 3 == 2
+					{
+						Card::Roman
+					}
+					else
+					{
+						Card::Worker
+					};
+					self.card_deck[i as usize] = card;
+				}
+				self.card_offset = 0;
+				return;
+			}
+			Some(Preview::PlaceWorker {
+				region_id,
+				terrain_type: TerrainType::Grass,
+			}) =>
+			{
+				self.grain += 1;
+				self.score += 1;
+				Some((region_id, Marker::Worker))
+			}
+			Some(Preview::PlaceWorker {
+				region_id,
+				terrain_type: TerrainType::Forest,
+			}) =>
+			{
+				self.wood += 1;
+				self.score += 1;
+				Some((region_id, Marker::Worker))
+			}
+			Some(Preview::PlaceWorker {
+				region_id,
+				terrain_type: TerrainType::Hill,
+			}) =>
+			{
+				self.wine += 1;
+				self.score += 1;
+				Some((region_id, Marker::Worker))
+			}
+			Some(Preview::PlaceWorker {
+				region_id,
+				terrain_type: TerrainType::Mountain,
+			}) =>
+			{
+				self.score += 1;
+				Some((region_id, Marker::Worker))
+			}
+			Some(Preview::PlaceRoman { region_id }) =>
+			{
+				self.score += 1;
+				Some((region_id, Marker::Roman))
+			}
+			_ => None,
+		};
+		if let Some((region_id, marker)) = placed
+		{
+			self.region_data[region_id as usize].marker = Some(marker);
+			map.set_marker_in_region(region_id, Some(marker));
+			self.card_offset += 1;
+		}
 	}
 
 	pub fn draw(&mut self)
@@ -244,24 +339,71 @@ impl Level
 					TerrainType::Grass => palette::GOLD,
 				},
 				Some(Preview::PlaceRoman { region_id: _ }) => palette::BLOOD,
+				Some(Preview::CannotPlaceRoman) => palette::BLOOD,
+				Some(Preview::Shuffle) => palette::DEFAULT,
 				None => palette::DEFAULT,
 			};
 			unsafe { *PALETTE = palette };
 		}
 
 		{
-			let highlighted_terrain = match self.hover_preview
+			let (region_id, highlighted_terrain) = match self.hover_preview
 			{
 				Some(Preview::HoverResource { terrain_type }) =>
 				{
-					Some(terrain_type)
+					(None, Some(terrain_type))
 				}
-				_ => None,
+				Some(Preview::PlaceWorker {
+					region_id,
+					terrain_type: _,
+				}) => (Some(region_id), None),
+				Some(Preview::PlaceRoman { region_id }) =>
+				{
+					(Some(region_id), None)
+				}
+				_ => (None, None),
 			};
 
 			// TODO do this more cleanly?
 			let map = MAP.get_mut();
-			map.draw(highlighted_terrain);
+			map.draw(region_id, highlighted_terrain);
+		}
+
+		if self.card_offset < self.num_cards
+		{
+			unsafe { *DRAW_COLORS = 0x31 };
+			rect(-1, 9, 9, 3 + 7 * (self.num_cards as u32));
+			unsafe { *DRAW_COLORS = 3 };
+			hline(0, 17, 9);
+
+			match self.hover_preview
+			{
+				Some(Preview::PlaceRoman { .. })
+				| Some(Preview::CannotPlaceRoman) =>
+				{
+					unsafe { *DRAW_COLORS = 0x44 };
+				}
+				_ =>
+				{
+					unsafe { *DRAW_COLORS = 0x22 };
+				}
+			}
+			rect(0, 10, 7, 7);
+
+			unsafe { *DRAW_COLORS = 0x4320 };
+			let remaining_card_offsets =
+				(self.card_offset as usize)..(self.num_cards as usize);
+			for (i, card) in
+				self.card_deck[remaining_card_offsets].iter().enumerate()
+			{
+				let y = 11 + 1 * ((i > 0) as i32) + 7 * (i as i32);
+				let alt = match card
+				{
+					Card::Worker => 0,
+					Card::Roman => 1,
+				};
+				sprites::draw_card_icon(1, y, alt);
+			}
 		}
 
 		unsafe { *DRAW_COLORS = 0x11 };
@@ -312,17 +454,18 @@ impl Level
 			{
 				sprites::draw_backfill(UI_X_GOLD - 4, 0, 0);
 			}
-			Some(Preview::PlaceRoman { region_id: _ }) =>
+			Some(Preview::PlaceRoman { region_id: _ })
+			| Some(Preview::CannotPlaceRoman) =>
 			{
-				sprites::draw_backfill((SCREEN_SIZE as i32) - 21, 0, 0);
+				sprites::draw_backfill((SCREEN_SIZE as i32) - 24, 0, 0);
 			}
 			_ => (),
 		}
 
 		unsafe { *DRAW_COLORS = 0x3210 };
-		sprites::draw_score_icon(-2, 0);
+		sprites::draw_score_icon(-3, 0);
 		unsafe { *DRAW_COLORS = 3 };
-		draw_score(self.score, 7, 1);
+		draw_score(self.score, 6, 1);
 
 		unsafe { *DRAW_COLORS = 0x3210 };
 		sprites::draw_grain_icon(UI_X_GRAIN, 0);
@@ -342,9 +485,9 @@ impl Level
 		draw_resource_value(self.gold, UI_X_GOLD + 8, 1);
 
 		unsafe { *DRAW_COLORS = 0x3210 };
-		sprites::draw_wreath_icon((SCREEN_SIZE as i32) - 18, 0);
+		sprites::draw_wreath_icon((SCREEN_SIZE as i32) - 17, 0);
 		unsafe { *DRAW_COLORS = 3 };
-		draw_threat_value(self.threat_level, (SCREEN_SIZE as i32) - 9, 1);
+		draw_threat_value(self.threat_level, (SCREEN_SIZE as i32) - 8, 1);
 	}
 }
 

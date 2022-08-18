@@ -47,11 +47,25 @@ const EMPTY_REGION: Region = Region {
 
 enum Preview
 {
-	Gather
+	HoverResource
 	{
 		terrain_type: TerrainType
 	},
+	PlaceWorker
+	{
+		region_id: u8,
+		terrain_type: TerrainType,
+	},
+	PlaceRoman
+	{
+		region_id: u8
+	},
 }
+
+const UI_X_GRAIN: i32 = 35;
+const UI_X_WOOD: i32 = 61;
+const UI_X_WINE: i32 = 87;
+const UI_X_GOLD: i32 = 113;
 
 pub struct Level
 {
@@ -126,54 +140,84 @@ impl Level
 					TerrainType::Grass
 					| TerrainType::Forest
 					| TerrainType::Hill
-					| TerrainType::Mountain => Some(Preview::Gather {
+					| TerrainType::Mountain => Some(Preview::PlaceWorker {
+						region_id,
 						terrain_type: region.terrain_type,
 					}),
 					TerrainType::Water => None,
 				};
 				self.hover_preview = preview;
 			}
-
-			if (mousebuttons & MOUSE_LEFT != 0)
-				&& (self.previous_mousebuttons & MOUSE_LEFT == 0)
+		}
+		else
+		{
+			let (mouse_x, mouse_y): (i16, i16) =
+				unsafe { (*MOUSE_X, *MOUSE_Y) };
+			if mouse_y < 9
 			{
-				let marker = match self.hover_preview
+				for (t, x) in [
+					(TerrainType::Grass, UI_X_GRAIN),
+					(TerrainType::Forest, UI_X_WOOD),
+					(TerrainType::Hill, UI_X_WINE),
+					(TerrainType::Mountain, UI_X_GOLD),
+				]
 				{
-					Some(Preview::Gather {
-						terrain_type: TerrainType::Grass,
-					}) =>
+					if mouse_x as i32 >= x - 3 && mouse_x as i32 <= x + 28
 					{
-						self.grain += 1;
-						self.score += 1;
-						Some(Marker::Worker)
+						self.hover_preview =
+							Some(Preview::HoverResource { terrain_type: t });
 					}
-					Some(Preview::Gather {
-						terrain_type: TerrainType::Forest,
-					}) =>
-					{
-						self.wood += 1;
-						self.score += 1;
-						Some(Marker::Worker)
-					}
-					Some(Preview::Gather {
-						terrain_type: TerrainType::Hill,
-					}) =>
-					{
-						self.wine += 1;
-						self.score += 1;
-						Some(Marker::Worker)
-					}
-					Some(Preview::Gather {
-						terrain_type: TerrainType::Mountain,
-					}) =>
-					{
-						self.score += 1;
-						Some(Marker::Worker)
-					}
-					_ => None,
-				};
-				self.region_data[region_id as usize].marker = marker;
-				map.set_marker_in_region(region_id, marker);
+				}
+			}
+		}
+
+		if hovered_region_id.is_some()
+			&& (mousebuttons & MOUSE_LEFT != 0)
+			&& (self.previous_mousebuttons & MOUSE_LEFT == 0)
+		{
+			let placed = match self.hover_preview
+			{
+				Some(Preview::PlaceWorker {
+					region_id,
+					terrain_type: TerrainType::Grass,
+				}) =>
+				{
+					self.grain += 1;
+					self.score += 1;
+					Some((region_id, Marker::Worker))
+				}
+				Some(Preview::PlaceWorker {
+					region_id,
+					terrain_type: TerrainType::Forest,
+				}) =>
+				{
+					self.wood += 1;
+					self.score += 1;
+					Some((region_id, Marker::Worker))
+				}
+				Some(Preview::PlaceWorker {
+					region_id,
+					terrain_type: TerrainType::Hill,
+				}) =>
+				{
+					self.wine += 1;
+					self.score += 1;
+					Some((region_id, Marker::Worker))
+				}
+				Some(Preview::PlaceWorker {
+					region_id,
+					terrain_type: TerrainType::Mountain,
+				}) =>
+				{
+					self.score += 1;
+					Some((region_id, Marker::Worker))
+				}
+				_ => None,
+			};
+			if let Some((region_id, marker)) = placed
+			{
+				self.region_data[region_id as usize].marker = Some(marker);
+				map.set_marker_in_region(region_id, Some(marker));
 			}
 		}
 
@@ -187,7 +231,11 @@ impl Level
 		{
 			let palette = match self.hover_preview
 			{
-				Some(Preview::Gather { terrain_type }) => match terrain_type
+				Some(Preview::HoverResource { terrain_type })
+				| Some(Preview::PlaceWorker {
+					region_id: _,
+					terrain_type,
+				}) => match terrain_type
 				{
 					TerrainType::Water => palette::DEFAULT,
 					TerrainType::Mountain => palette::SNOW,
@@ -195,77 +243,108 @@ impl Level
 					TerrainType::Forest => palette::NATURE,
 					TerrainType::Grass => palette::GOLD,
 				},
+				Some(Preview::PlaceRoman { region_id: _ }) => palette::BLOOD,
 				None => palette::DEFAULT,
 			};
 			unsafe { *PALETTE = palette };
 		}
 
 		{
+			let highlighted_terrain = match self.hover_preview
+			{
+				Some(Preview::HoverResource { terrain_type }) =>
+				{
+					Some(terrain_type)
+				}
+				_ => None,
+			};
+
 			// TODO do this more cleanly?
 			let map = MAP.get_mut();
-			map.draw();
+			map.draw(highlighted_terrain);
 		}
 
-		{
-			unsafe { *DRAW_COLORS = 0x11 };
-			rect(0, 0, 160, 10);
-			unsafe { *DRAW_COLORS = 3 };
-			hline(0, 9, 160);
+		unsafe { *DRAW_COLORS = 0x11 };
+		rect(0, 0, 160, 10);
+		unsafe { *DRAW_COLORS = 3 };
+		hline(0, 9, 160);
 
-			let mut x = -2;
-			unsafe { *DRAW_COLORS = 0x3210 };
-			sprites::draw_score_icon(x, 0);
-			x += 9;
-			unsafe { *DRAW_COLORS = 3 };
-			draw_score(self.score, x, 1);
-			x += 3 * 8 + 4;
-			self.draw_backfill_if_gathering(TerrainType::Grass, x, 0);
-			unsafe { *DRAW_COLORS = 0x3210 };
-			sprites::draw_grain_icon(x, 0);
-			x += 8;
-			unsafe { *DRAW_COLORS = 3 };
-			draw_resource_value(self.grain, x, 1);
-			x += 2 * 8 + 2;
-			self.draw_backfill_if_gathering(TerrainType::Forest, x, 0);
-			unsafe { *DRAW_COLORS = 0x3210 };
-			sprites::draw_wood_icon(x, 0);
-			x += 8;
-			unsafe { *DRAW_COLORS = 3 };
-			draw_resource_value(self.wood, x, 1);
-			x += 2 * 8 + 2;
-			self.draw_backfill_if_gathering(TerrainType::Hill, x, 0);
-			unsafe { *DRAW_COLORS = 0x3210 };
-			sprites::draw_wine_icon(x, 0);
-			x += 8;
-			unsafe { *DRAW_COLORS = 3 };
-			draw_resource_value(self.wine, x, 1);
-			x += 2 * 8 + 2;
-			self.draw_backfill_if_gathering(TerrainType::Mountain, x, 0);
-			unsafe { *DRAW_COLORS = 0x3210 };
-			sprites::draw_gold_icon(x, 0);
-			x += 8;
-			unsafe { *DRAW_COLORS = 3 };
-			draw_resource_value(self.gold, x, 1);
-			x = (SCREEN_SIZE as i32) - 18;
-			unsafe { *DRAW_COLORS = 0x3210 };
-			sprites::draw_wreath_icon(x, 0);
-			x += 9;
-			unsafe { *DRAW_COLORS = 3 };
-			draw_threat_value(self.threat_level, x, 1);
-		}
-	}
-
-	fn draw_backfill_if_gathering(&self, target: TerrainType, x: i32, y: i32)
-	{
+		unsafe { *DRAW_COLORS = 0x40 };
 		match self.hover_preview
 		{
-			Some(Preview::Gather { terrain_type: tt }) if tt == target =>
+			Some(Preview::HoverResource {
+				terrain_type: TerrainType::Grass,
+			})
+			| Some(Preview::PlaceWorker {
+				region_id: _,
+				terrain_type: TerrainType::Grass,
+			}) =>
 			{
-				unsafe { *DRAW_COLORS = 0x40 };
-				sprites::draw_backfill(x - 4, y, 0);
+				sprites::draw_backfill(UI_X_GRAIN - 4, 0, 0);
+			}
+			Some(Preview::HoverResource {
+				terrain_type: TerrainType::Forest,
+			})
+			| Some(Preview::PlaceWorker {
+				region_id: _,
+				terrain_type: TerrainType::Forest,
+			}) =>
+			{
+				sprites::draw_backfill(UI_X_WOOD - 4, 0, 0);
+			}
+			Some(Preview::HoverResource {
+				terrain_type: TerrainType::Hill,
+			})
+			| Some(Preview::PlaceWorker {
+				region_id: _,
+				terrain_type: TerrainType::Hill,
+			}) =>
+			{
+				sprites::draw_backfill(UI_X_WINE - 4, 0, 0);
+			}
+			Some(Preview::HoverResource {
+				terrain_type: TerrainType::Mountain,
+			})
+			| Some(Preview::PlaceWorker {
+				region_id: _,
+				terrain_type: TerrainType::Mountain,
+			}) =>
+			{
+				sprites::draw_backfill(UI_X_GOLD - 4, 0, 0);
+			}
+			Some(Preview::PlaceRoman { region_id: _ }) =>
+			{
+				sprites::draw_backfill((SCREEN_SIZE as i32) - 21, 0, 0);
 			}
 			_ => (),
 		}
+
+		unsafe { *DRAW_COLORS = 0x3210 };
+		sprites::draw_score_icon(-2, 0);
+		unsafe { *DRAW_COLORS = 3 };
+		draw_score(self.score, 7, 1);
+
+		unsafe { *DRAW_COLORS = 0x3210 };
+		sprites::draw_grain_icon(UI_X_GRAIN, 0);
+		unsafe { *DRAW_COLORS = 3 };
+		draw_resource_value(self.grain, UI_X_GRAIN + 8, 1);
+		unsafe { *DRAW_COLORS = 0x3210 };
+		sprites::draw_wood_icon(UI_X_WOOD, 0);
+		unsafe { *DRAW_COLORS = 3 };
+		draw_resource_value(self.wood, UI_X_WOOD + 8, 1);
+		unsafe { *DRAW_COLORS = 0x3210 };
+		sprites::draw_wine_icon(UI_X_WINE, 0);
+		unsafe { *DRAW_COLORS = 3 };
+		draw_resource_value(self.wine, UI_X_WINE + 8, 1);
+		unsafe { *DRAW_COLORS = 0x3210 };
+		sprites::draw_gold_icon(UI_X_GOLD, 0);
+		unsafe { *DRAW_COLORS = 3 };
+		draw_resource_value(self.gold, UI_X_GOLD + 8, 1);
+
+		unsafe { *DRAW_COLORS = 0x3210 };
+		sprites::draw_wreath_icon((SCREEN_SIZE as i32) - 18, 0);
+		unsafe { *DRAW_COLORS = 3 };
+		draw_threat_value(self.threat_level, (SCREEN_SIZE as i32) - 9, 1);
 	}
 }
 

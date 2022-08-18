@@ -6,7 +6,7 @@ Mechanics:
   ✔ Basic map generation @done (2022-08-15 18:42)
   ✔ Click on map regions @done (2022-08-18 12:45)
   ✔ Highlight region with color when hovered @done (2022-08-17 14:23)
-  ☐ Highlight relevant regions when hovering resource bar
+  ✔ Highlight relevant regions when hovering resource bar @done (2022-08-18 16:01)
   ✔ Gather resources @done (2022-08-18 15:17)
   ☐ Create fights
     ☐ Preview fights when hovered

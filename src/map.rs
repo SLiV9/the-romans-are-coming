@@ -763,33 +763,64 @@ impl Map
 		}
 	}
 
-	pub fn draw(&self)
+	pub fn draw(&self, highlighted_terrain_type: Option<TerrainType>)
 	{
+		let mut is_empty = [false; MAX_NUM_REGIONS];
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				match self.cells[r][c].contents
+				{
+					Contents::Region {
+						region_id,
+						marker,
+						is_occupied,
+						terrain_type: _,
+					} =>
+					{
+						is_empty[region_id as usize] =
+							marker.is_none() && !is_occupied;
+					}
+					_ => (),
+				}
+			}
+		}
+
 		let hovered_region_id = self.determine_hovered_region_id();
 
 		unsafe { *DRAW_COLORS = 0x40 };
-		if let Some(region_id) = hovered_region_id
+		if hovered_region_id.is_some() || highlighted_terrain_type.is_some()
 		{
 			for v in 0..PROP_GRID_SIZE
 			{
 				for u in 0..PROP_GRID_SIZE
 				{
 					let offset = v * PROP_GRID_SIZE + u;
-					if self.prop_region_map[offset] != region_id
+					let region_id = self.prop_region_map[offset];
+					if region_id == 0
+						|| !is_empty[region_id as usize]
+						|| (highlighted_terrain_type.is_none()
+							&& hovered_region_id != Some(region_id))
 					{
 						continue;
 					}
 					let x = MAP_X + (u * PROP_GRID_CELL_SIZE) as i32;
 					let y = MAP_Y + (v * PROP_GRID_CELL_SIZE) as i32;
 					let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
-					match get_from_propmap(&self.surface_propmap, u, v)
+					let tt = get_from_propmap(&self.surface_propmap, u, v);
+					match tt
 					{
 						Some(TerrainType::Mountain)
 						| Some(TerrainType::Hill)
 						| Some(TerrainType::Forest)
 						| Some(TerrainType::Grass) =>
 						{
-							sprites::draw_surface(x, y, alt);
+							if hovered_region_id == Some(region_id)
+								|| tt == highlighted_terrain_type
+							{
+								sprites::draw_surface(x, y, alt);
+							}
 						}
 						_ => (),
 					}
@@ -896,7 +927,11 @@ impl Map
 			{
 				let offset = v * PROP_GRID_SIZE + u;
 				let region_id = self.prop_region_map[offset];
-				if hovered_region_id == Some(region_id)
+				let terrain_type = get_from_propmap(&self.propmap, u, v);
+				if region_id != 0
+					&& is_empty[region_id as usize]
+					&& (hovered_region_id == Some(region_id)
+						|| highlighted_terrain_type == terrain_type)
 				{
 					unsafe { *DRAW_COLORS = 0x4320 };
 				}
@@ -908,7 +943,7 @@ impl Map
 				let y =
 					MAP_Y + (v * PROP_GRID_CELL_SIZE) as i32 + (u % 2) as i32;
 				let alt = ((23 * u + 71 * v + 59 * (u + v)) % 97) as u8;
-				match get_from_propmap(&self.propmap, u, v)
+				match terrain_type
 				{
 					Some(TerrainType::Mountain) =>
 					{
@@ -975,17 +1010,10 @@ impl Map
 		}
 		match self.cells[r][c].contents
 		{
-			Contents::Region {
-				region_id,
-				terrain_type,
-				marker: _,
-				is_occupied,
-			}
-			| Contents::Subregion {
-				parent_region_id: region_id,
-				parent_terrain_type: terrain_type,
-				is_occupied,
-			} => Some(region_id),
+			Contents::Region { region_id, .. } => Some(region_id),
+			Contents::Subregion {
+				parent_region_id, ..
+			} => Some(parent_region_id),
 			_ => None,
 		}
 	}

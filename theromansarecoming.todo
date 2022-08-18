@@ -9,13 +9,18 @@ Mechanics:
   ✔ Highlight relevant regions when hovering resource bar @done (2022-08-18 16:01)
   ✔ Gather resources @done (2022-08-18 15:17)
   ☐ Create fights
-    ☐ Preview fights when hovered
+    ✔ Preview fights when hovered @done (2022-08-18 23:18)
   ☐ Create cities
   ☐ End of year effects
+  ☐ Update occupation based on unchallenged romans
+    ☐ Occupy completely surrounded clusters of mountains
+    ☐ Occupy adjacent cells
+    ☐ Occupy everything if everything is adjacent to occupation
 
 Content:
   ✔ Fancy map generation @done (2022-08-17 21:49)
     ☐ Regions zonder props cullen
+    ☐ Hele kleine regions cullen
   ☐ Mini-objectives
   ☐ Imperial decrees
     ☐ Detect when placement is impossible

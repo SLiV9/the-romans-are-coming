@@ -11,6 +11,7 @@ use crate::level::TerrainType;
 use crate::level::MAX_NUM_REGIONS;
 use crate::sprites;
 
+use bitmaps::Bitmap;
 use fastrand;
 use perlin2d::PerlinNoise2D;
 
@@ -22,6 +23,7 @@ pub const PROP_GRID_SIZE: usize = 40;
 pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
 pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
 
+const MIN_NUM_REGIONS: usize = 25;
 const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
 const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
 const DBR_BBOX_RADIUS: i32 = 4;
@@ -84,7 +86,7 @@ impl Map
 		}
 	}
 
-	pub fn generate(&mut self, min_num_regions: usize, rng: &mut fastrand::Rng)
+	pub fn generate(&mut self, rng: &mut fastrand::Rng)
 	{
 		let seed = rng.u16(..) as i32;
 		let elevation = generate_elevation_noise(seed);
@@ -267,7 +269,7 @@ impl Map
 				}
 			}
 		}
-		while num_candidates > min_num_regions
+		while num_candidates > MIN_NUM_REGIONS
 		{
 			let worst = cell_badness
 				.iter()
@@ -729,9 +731,10 @@ impl Map
 			})
 	}
 
-	pub fn fill_adjacency_bits(
+	pub fn fill_adjacency(
 		&self,
-		adjacency_bits: &mut [u64; MAX_NUM_REGIONS],
+		adjacency: &mut [Bitmap<MAX_NUM_REGIONS>; MAX_NUM_REGIONS],
+		border_adjacency: &mut Bitmap<MAX_NUM_REGIONS>,
 	)
 	{
 		for v in 0..PROP_GRID_SIZE
@@ -748,8 +751,8 @@ impl Map
 					let j = self.prop_region_map[v][u - 1];
 					if i != j && j >= 0
 					{
-						adjacency_bits[i as usize] |= 0b1 << j;
-						adjacency_bits[j as usize] |= 0b1 << i;
+						adjacency[i as usize].set(j as usize, true);
+						adjacency[j as usize].set(i as usize, true);
 					}
 				}
 				if v > 0
@@ -757,15 +760,15 @@ impl Map
 					let j = self.prop_region_map[v - 1][u];
 					if i != j && j >= 0
 					{
-						adjacency_bits[i as usize] |= 0b1 << j;
-						adjacency_bits[j as usize] |= 0b1 << i;
+						adjacency[i as usize].set(j as usize, true);
+						adjacency[j as usize].set(i as usize, true);
 					}
 				}
 				if u == 0
 					|| v == 0 || u == PROP_GRID_SIZE - 1
 					|| v == PROP_GRID_SIZE - 1
 				{
-					adjacency_bits[i as usize] |= 0b1 << 63;
+					border_adjacency.set(i as usize, true);
 				}
 			}
 		}
@@ -826,14 +829,15 @@ impl Map
 				}
 			}
 		}
-		// TODO occupy combined mountain range if it is completely surrounded
-		// TODO occupy culled regions if they are adjacent
 	}
 
 	pub fn draw(
 		&self,
 		hovered_region_id: Option<i8>,
 		highlighted_terrain_type: Option<TerrainType>,
+		kill_preview: Bitmap<MAX_NUM_REGIONS>,
+		attack_preview: Bitmap<MAX_NUM_REGIONS>,
+		support_preview: Bitmap<MAX_NUM_REGIONS>,
 	)
 	{
 		let mut is_empty = [false; MAX_NUM_REGIONS];
@@ -1026,11 +1030,13 @@ impl Map
 					}
 					Some(TerrainType::Grass) =>
 					{
-						// TODO find a less hacky way to detect this?
-						let is_placing_roman =
-							hovered_region_id == Some(region_id)
-								&& unsafe { *PALETTE == crate::palette::BLOOD };
-						if alt < 25 && (u + v) % 2 > 0 && !is_placing_roman
+						let is_palette_bloody =
+							unsafe { *PALETTE == crate::palette::BLOOD }
+								|| unsafe { *PALETTE == crate::palette::ROMAN };
+						let is_placing_blood = hovered_region_id
+							== Some(region_id)
+							&& is_palette_bloody;
+						if alt < 25 && (u + v) % 2 > 0 && !is_placing_blood
 						{
 							sprites::draw_grass(x, y, alt);
 						}
@@ -1047,22 +1053,39 @@ impl Map
 				match cell.contents
 				{
 					Contents::Region {
+						region_id,
 						marker: Some(marker),
 						..
 					} =>
 					{
+						let is_killed = kill_preview.get(region_id as usize);
 						let flag = match marker
 						{
+							Marker::Roman if is_killed => 1,
 							Marker::Roman => 0,
 							Marker::DeadRoman => 1,
+							Marker::Worker if is_killed => 3,
 							Marker::Worker => 2,
 							Marker::DeadWorker => 3,
 							Marker::Occupied => 0,
 						};
 						let x = MAP_X + cell.centroid_x as i32;
-						let y = MAP_Y + cell.centroid_y as i32 - 1;
+						let y = MAP_Y + cell.centroid_y as i32;
 						unsafe { *DRAW_COLORS = 0x3210 };
 						sprites::draw_flag(x, y, flag);
+						unsafe { *DRAW_COLORS = 0x2310 };
+						if is_killed
+						{
+							sprites::draw_killed_town(x, y);
+						}
+						else if attack_preview.get(region_id as usize)
+						{
+							sprites::draw_attacking_town(x, y);
+						}
+						else if support_preview.get(region_id as usize)
+						{
+							sprites::draw_supporting_town(x, y);
+						}
 					}
 					Contents::Region {
 						region_id,
@@ -1071,9 +1094,23 @@ impl Map
 					} if hovered_region_id == Some(region_id) =>
 					{
 						let x = MAP_X + cell.centroid_x as i32;
-						let y = MAP_Y + cell.centroid_y as i32 + 1;
-						unsafe { *DRAW_COLORS = 0x34 };
-						rect(x - 2, y - 2, 5, 5);
+						let y = MAP_Y + cell.centroid_y as i32;
+						unsafe { *DRAW_COLORS = 0x4310 };
+						if kill_preview.get(region_id as usize)
+						{
+							unsafe { *DRAW_COLORS = 0x2310 };
+							sprites::draw_killed_town(x, y);
+						}
+						else if attack_preview.get(region_id as usize)
+						{
+							sprites::draw_hovered_town(x, y);
+							unsafe { *DRAW_COLORS = 0x2310 };
+							sprites::draw_attacking_town(x + 6, y);
+						}
+						else
+						{
+							sprites::draw_hovered_town(x, y);
+						}
 					}
 					_ => (),
 				}

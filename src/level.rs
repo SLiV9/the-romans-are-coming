@@ -57,6 +57,16 @@ const EMPTY_REGION: Region = Region {
 };
 
 #[derive(Debug, Clone, Copy)]
+enum State
+{
+	Setup,
+	Placement,
+	Shuffling,
+	Resolution,
+	Cleanup,
+}
+
+#[derive(Debug, Clone, Copy)]
 enum Preview
 {
 	HoverResource
@@ -73,7 +83,6 @@ enum Preview
 		region_id: i8,
 	},
 	CannotPlaceRoman,
-	Shuffle,
 }
 
 const UI_X_GRAIN: i32 = 35;
@@ -99,8 +108,10 @@ pub struct Level
 	wine: u8,
 	gold: u8,
 	score: u16,
+	ticks_in_second: u8,
 	previous_gamepad: u8,
 	previous_mousebuttons: u8,
+	state: State,
 	hover_preview: Option<Preview>,
 }
 
@@ -142,7 +153,7 @@ impl Level
 				map.set_marker_in_region(region_id, Some(marker));
 			}
 		}
-		let threat_level = 1;
+		let threat_level = 2;
 		Level {
 			num_regions,
 			region_data,
@@ -160,9 +171,11 @@ impl Level
 			wine: 0,
 			gold: 0,
 			score: 0,
+			ticks_in_second: 0,
 			previous_gamepad: 0,
 			previous_mousebuttons: 0,
 			hover_preview: None,
+			state: State::Setup,
 		}
 	}
 
@@ -189,22 +202,97 @@ impl Level
 		let hovered_region_id = map.determine_hovered_region_id();
 		if active_card.is_none()
 		{
-			self.hover_preview = Some(Preview::Shuffle);
+			match self.state
+			{
+				State::Setup =>
+				{
+					self.state = State::Shuffling;
+					self.ticks_in_second = 0;
+				}
+				State::Placement =>
+				{
+					if self.count_remaining_spaces() == 0
+					{
+						self.state = State::Resolution;
+					}
+					else
+					{
+						self.state = State::Shuffling;
+					}
+					self.ticks_in_second = 0;
+				}
+				State::Shuffling =>
+				{
+					if self.ticks_in_second == 30
+					{
+						self.shuffle();
+						self.state = State::Placement;
+					}
+				}
+				State::Resolution =>
+				{
+					if self.ticks_in_second == 20
+					{
+						let survivor =
+							(0..(self.num_regions as usize)).find(|i| {
+								self.region_data[*i].marker
+									== Some(Marker::Worker)
+							});
+						if let Some(i) = survivor
+						{
+							match self.region_data[i].terrain_type
+							{
+								TerrainType::Grass => self.grain += 1,
+								TerrainType::Forest => self.wood += 1,
+								TerrainType::Hill => self.wine += 1,
+								TerrainType::Mountain => self.gold += 1,
+								TerrainType::Water => (),
+							}
+							self.region_data[i].marker = None;
+							map.set_marker_in_region(i as i8, None);
+						}
+						else
+						{
+							self.state = State::Cleanup;
+						}
+						self.ticks_in_second = 0;
+					}
+				}
+				State::Cleanup =>
+				{
+					if self.ticks_in_second == 5
+					{
+						let trash = (0..(self.num_regions as usize))
+							.find(|i| self.region_data[*i].marker.is_some());
+						if let Some(i) = trash
+						{
+							self.region_data[i].marker = None;
+							map.set_marker_in_region(i as i8, None);
+						}
+						else
+						{
+							self.state = State::Shuffling;
+						}
+						self.ticks_in_second = 0;
+					}
+				}
+			}
 		}
 		else if let Some(region_id) = hovered_region_id
 		{
 			let region = self.region_data[region_id as usize];
 			if region.marker.is_none()
 			{
+				let can_place = match region.terrain_type
+				{
+					TerrainType::Grass => true,
+					TerrainType::Forest => true,
+					TerrainType::Hill => true,
+					TerrainType::Mountain => true,
+					_ => false,
+				};
 				let preview = if active_card == Some(Card::Roman)
 				{
-					let can_place = match region.terrain_type
-					{
-						TerrainType::Grass => true,
-						TerrainType::Forest => true,
-						TerrainType::Hill => true,
-						_ => false,
-					};
 					if can_place
 					{
 						self.figure_out_combat(region_id, Card::Roman);
@@ -217,14 +305,6 @@ impl Level
 				}
 				else
 				{
-					let can_place = match region.terrain_type
-					{
-						TerrainType::Grass => true,
-						TerrainType::Forest => true,
-						TerrainType::Hill => true,
-						TerrainType::Mountain => true,
-						_ => false,
-					};
 					if can_place
 					{
 						self.figure_out_combat(region_id, Card::Worker);
@@ -271,9 +351,14 @@ impl Level
 		if (mousebuttons & MOUSE_LEFT != 0)
 			&& (self.previous_mousebuttons & MOUSE_LEFT == 0)
 		{
-			self.handle_click(map);
+			self.place_marker(map);
 		}
 
+		self.ticks_in_second += 1;
+		if self.ticks_in_second == 60
+		{
+			self.ticks_in_second = 0;
+		}
 		self.previous_gamepad = gamepad;
 		self.previous_mousebuttons = mousebuttons;
 		None
@@ -364,37 +449,50 @@ impl Level
 		}
 	}
 
-	fn handle_click(&mut self, map: &mut Map)
+	fn count_remaining_spaces(&self) -> usize
 	{
-		let placed = match self.hover_preview
+		self.region_data[0..(self.num_regions as usize)]
+			.iter()
+			.filter(|region| region.marker.is_none())
+			.filter(|region| region.terrain_type != TerrainType::Water)
+			.count()
+	}
+
+	fn shuffle(&mut self)
+	{
+		let num_workers = 4;
+		let num_remaining_spaces = self.count_remaining_spaces();
+		self.num_cards = std::cmp::min(
+			num_workers + self.threat_level,
+			num_remaining_spaces as u8,
+		);
+		for i in 0..self.num_cards
 		{
-			Some(Preview::Shuffle) =>
+			let card = if i / 3 >= num_workers
 			{
-				let num_workers = 5;
-				self.num_cards = num_workers + self.threat_level;
-				for i in 0..self.num_cards
-				{
-					let card = if i / 3 >= num_workers
-					{
-						Card::Roman
-					}
-					else if i / 3 >= self.threat_level
-					{
-						Card::Worker
-					}
-					else if i % 3 == 2
-					{
-						Card::Roman
-					}
-					else
-					{
-						Card::Worker
-					};
-					self.card_deck[i as usize] = card;
-				}
-				self.card_offset = 0;
-				return;
+				Card::Roman
 			}
+			else if i / 3 >= self.threat_level
+			{
+				Card::Worker
+			}
+			else if i % 3 == 2
+			{
+				Card::Roman
+			}
+			else
+			{
+				Card::Worker
+			};
+			self.card_deck[i as usize] = card;
+		}
+		self.card_offset = 0;
+	}
+
+	fn place_marker(&mut self, map: &mut Map)
+	{
+		let (region_id, marker) = match self.hover_preview
+		{
 			Some(Preview::PlaceWorker {
 				region_id,
 				terrain_type,
@@ -403,7 +501,7 @@ impl Level
 				self.score += 1;
 				if self.kill_preview.get(region_id as usize)
 				{
-					Some((region_id, Marker::DeadWorker))
+					(region_id, Marker::DeadWorker)
 				}
 				else
 				{
@@ -415,7 +513,7 @@ impl Level
 						TerrainType::Mountain => (),
 						TerrainType::Water => (),
 					}
-					Some((region_id, Marker::Worker))
+					(region_id, Marker::Worker)
 				}
 			}
 			Some(Preview::PlaceRoman { region_id }) =>
@@ -423,35 +521,32 @@ impl Level
 				self.score += 1;
 				if self.kill_preview.get(region_id as usize)
 				{
-					Some((region_id, Marker::DeadRoman))
+					(region_id, Marker::DeadRoman)
 				}
 				else
 				{
-					Some((region_id, Marker::Roman))
+					(region_id, Marker::Roman)
 				}
 			}
-			_ => None,
+			_ => return,
 		};
-		if let Some((region_id, marker)) = placed
+		self.region_data[region_id as usize].marker = Some(marker);
+		map.set_marker_in_region(region_id, Some(marker));
+		for i in self.kill_preview.into_iter()
 		{
-			self.region_data[region_id as usize].marker = Some(marker);
-			map.set_marker_in_region(region_id, Some(marker));
-			for i in self.kill_preview.into_iter()
+			if i != region_id as usize
 			{
-				if i != region_id as usize
+				let killed = match self.region_data[i].marker
 				{
-					let killed = match self.region_data[i].marker
-					{
-						Some(Marker::Roman) => Some(Marker::DeadRoman),
-						Some(Marker::Worker) => Some(Marker::DeadWorker),
-						_ => None,
-					};
-					self.region_data[i].marker = killed;
-					map.set_marker_in_region(i as i8, killed);
-				}
+					Some(Marker::Roman) => Some(Marker::DeadRoman),
+					Some(Marker::Worker) => Some(Marker::DeadWorker),
+					_ => None,
+				};
+				self.region_data[i].marker = killed;
+				map.set_marker_in_region(i as i8, killed);
 			}
-			self.card_offset += 1;
 		}
+		self.card_offset += 1;
 	}
 
 	pub fn draw(&mut self)
@@ -493,7 +588,6 @@ impl Level
 				}
 				Some(Preview::PlaceRoman { region_id: _ }) => palette::ROMAN,
 				Some(Preview::CannotPlaceRoman) => palette::ROMAN,
-				Some(Preview::Shuffle) => palette::DEFAULT,
 				None => palette::DEFAULT,
 			};
 			unsafe { *PALETTE = palette };

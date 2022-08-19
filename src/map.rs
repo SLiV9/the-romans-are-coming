@@ -1584,19 +1584,6 @@ const EMPTY_CELL: Cell = Cell {
 
 impl Cell
 {
-	fn terrain_type(&self) -> Option<TerrainType>
-	{
-		match self.contents
-		{
-			Contents::Region { terrain_type, .. } => Some(terrain_type),
-			Contents::Subregion {
-				parent_terrain_type,
-				..
-			} => Some(parent_terrain_type),
-			_ => None,
-		}
-	}
-
 	fn is_occupied(&self) -> bool
 	{
 		match self.contents
@@ -1605,17 +1592,6 @@ impl Cell
 			Contents::Region { is_occupied, .. } => is_occupied,
 			Contents::Subregion { is_occupied, .. } => is_occupied,
 			_ => false,
-		}
-	}
-
-	fn become_occupied(&mut self)
-	{
-		match &mut self.contents
-		{
-			Contents::Culled { is_occupied, .. } => *is_occupied = true,
-			Contents::Region { is_occupied, .. } => *is_occupied = true,
-			Contents::Subregion { is_occupied, .. } => *is_occupied = true,
-			_ => (),
 		}
 	}
 

@@ -397,43 +397,38 @@ impl Level
 			}
 			Some(Preview::PlaceWorker {
 				region_id,
-				terrain_type: TerrainType::Grass,
-			}) =>
-			{
-				self.grain += 1;
-				self.score += 1;
-				Some((region_id, Marker::Worker))
-			}
-			Some(Preview::PlaceWorker {
-				region_id,
-				terrain_type: TerrainType::Forest,
-			}) =>
-			{
-				self.wood += 1;
-				self.score += 1;
-				Some((region_id, Marker::Worker))
-			}
-			Some(Preview::PlaceWorker {
-				region_id,
-				terrain_type: TerrainType::Hill,
-			}) =>
-			{
-				self.wine += 1;
-				self.score += 1;
-				Some((region_id, Marker::Worker))
-			}
-			Some(Preview::PlaceWorker {
-				region_id,
-				terrain_type: TerrainType::Mountain,
+				terrain_type,
 			}) =>
 			{
 				self.score += 1;
-				Some((region_id, Marker::Worker))
+				if self.kill_preview.get(region_id as usize)
+				{
+					Some((region_id, Marker::DeadWorker))
+				}
+				else
+				{
+					match terrain_type
+					{
+						TerrainType::Grass => self.grain += 1,
+						TerrainType::Forest => self.wood += 1,
+						TerrainType::Hill => self.wine += 1,
+						TerrainType::Mountain => (),
+						TerrainType::Water => (),
+					}
+					Some((region_id, Marker::Worker))
+				}
 			}
 			Some(Preview::PlaceRoman { region_id }) =>
 			{
 				self.score += 1;
-				Some((region_id, Marker::Roman))
+				if self.kill_preview.get(region_id as usize)
+				{
+					Some((region_id, Marker::DeadRoman))
+				}
+				else
+				{
+					Some((region_id, Marker::Roman))
+				}
 			}
 			_ => None,
 		};
@@ -441,6 +436,20 @@ impl Level
 		{
 			self.region_data[region_id as usize].marker = Some(marker);
 			map.set_marker_in_region(region_id, Some(marker));
+			for i in self.kill_preview.into_iter()
+			{
+				if i != region_id as usize
+				{
+					let killed = match self.region_data[i].marker
+					{
+						Some(Marker::Roman) => Some(Marker::DeadRoman),
+						Some(Marker::Worker) => Some(Marker::DeadWorker),
+						_ => None,
+					};
+					self.region_data[i].marker = killed;
+					map.set_marker_in_region(i as i8, killed);
+				}
+			}
 			self.card_offset += 1;
 		}
 	}

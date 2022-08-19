@@ -6,6 +6,8 @@
 
 use crate::wasm4::*;
 
+use crate::decree::Decree;
+use crate::decree::{AllOrNone, InOrNear};
 use crate::global_state::Wrapper;
 use crate::map::Map;
 use crate::palette;
@@ -16,6 +18,7 @@ use fastrand;
 
 pub const MAX_NUM_REGIONS: usize = 35;
 pub const MAX_NUM_CARDS: usize = 20;
+pub const MAX_NUM_DECREES: usize = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerrainType
@@ -60,6 +63,7 @@ const EMPTY_REGION: Region = Region {
 enum State
 {
 	Setup,
+	NewDecrees,
 	Placement,
 	Shuffling,
 	Resolution,
@@ -102,8 +106,10 @@ pub struct Level
 	attack_preview: Bitmap<MAX_NUM_REGIONS>,
 	support_preview: Bitmap<MAX_NUM_REGIONS>,
 	card_deck: [Card; MAX_NUM_CARDS],
+	decree_data: [Decree; MAX_NUM_DECREES],
 	num_regions: u8,
 	num_cards: u8,
+	num_decrees: u8,
 	card_offset: u8,
 	threat_level: u8,
 	tribute: u8,
@@ -170,6 +176,8 @@ impl Level
 			num_cards: 0,
 			card_offset: 0,
 			card_deck: [Card::Worker; MAX_NUM_CARDS],
+			decree_data: [Decree::AllRomansAdjacent; MAX_NUM_DECREES],
+			num_decrees: 0,
 			threat_level,
 			tribute,
 			grain: 0,
@@ -206,7 +214,14 @@ impl Level
 		self.attack_preview = Bitmap::new();
 		self.support_preview = Bitmap::new();
 		let hovered_region_id = map.determine_hovered_region_id();
-		if active_card.is_none()
+		if self.num_decrees == 0
+		{
+			self.num_cards = 0;
+			self.pick_decrees();
+			self.state = State::NewDecrees;
+			self.ticks_in_4sec = 0;
+		}
+		else if active_card.is_none()
 		{
 			match self.state
 			{
@@ -321,6 +336,10 @@ impl Level
 						self.ticks_in_4sec = 0;
 					}
 				}
+				State::NewDecrees =>
+				{
+					self.hover_preview = Some(Preview::HoverDecrees);
+				}
 			}
 		}
 		else if let Some(region_id) = hovered_region_id
@@ -404,7 +423,19 @@ impl Level
 		if (mousebuttons & MOUSE_LEFT != 0)
 			&& (self.previous_mousebuttons & MOUSE_LEFT == 0)
 		{
-			self.place_marker(map);
+			match self.state
+			{
+				State::Placement =>
+				{
+					self.place_marker(map);
+				}
+				State::NewDecrees =>
+				{
+					self.state = State::Shuffling;
+					self.ticks_in_4sec = 0;
+				}
+				_ => (),
+			}
 		}
 
 		self.ticks_in_4sec += 1;
@@ -540,6 +571,34 @@ impl Level
 			self.card_deck[i as usize] = card;
 		}
 		self.card_offset = 0;
+	}
+
+	fn pick_decrees(&mut self)
+	{
+		self.num_decrees = 0;
+		self.decree_data[self.num_decrees as usize] =
+			Decree::AllWorkersAdjacent;
+		self.num_decrees += 1;
+		if self.threat_level == 0
+		{
+			return;
+		}
+		self.decree_data[self.num_decrees as usize] = Decree::AllRomansAdjacent;
+		self.num_decrees += 1;
+		let difficulty_level = 1;
+		for _i in 0..difficulty_level
+		{
+			let decree = Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Mountain,
+			};
+			self.decree_data[self.num_decrees as usize] = decree;
+			self.num_decrees += 1;
+		}
+		self.decree_data[self.num_decrees as usize] = Decree::NoRomansInAmbush;
+		self.num_decrees += 1;
 	}
 
 	fn place_marker(&mut self, map: &mut Map)
@@ -821,74 +880,13 @@ impl Level
 				y += 8;
 				text("DECREE", x + 10 + 8, y);
 				unsafe { *DRAW_COLORS = 3 };
-				y += 15;
-				if true
+				for decree in &self.decree_data[0..(self.num_decrees as usize)]
 				{
-					text("All", x, y);
-					unsafe { *DRAW_COLORS = 0x3210 };
-					sprites::draw_flag(x + 28 + 2, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					text("near", x + 38, y);
-					unsafe { *DRAW_COLORS = 0x3210 };
-					sprites::draw_flag(x + 66 + 8 + 2, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					y += 15
+					y += 15;
+					decree.draw(x, y);
 				}
-				if true
-				{
-					text("All", x, y);
-					unsafe { *DRAW_COLORS = 0x3210 };
-					sprites::draw_flag(x + 28 + 2, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					text("near", x + 38, y);
-					unsafe { *DRAW_COLORS = 0x20 };
-					sprites::draw_surface(x + 66 + 8 + 2, y, 0);
-					sprites::draw_surface(x + 66 + 6 + 2, y + 2, 0);
-					sprites::draw_surface(x + 66 + 10 + 2, y + 2, 0);
-					sprites::draw_surface(x + 66 + 8 + 2, y + 4, 0);
-					sprites::draw_surface(x + 66 + 6 + 2, y + 6, 0);
-					sprites::draw_surface(x + 66 + 10 + 2, y + 6, 0);
-					sprites::draw_surface(x + 66 + 8 + 2, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x1320 };
-					sprites::draw_boat(x + 66 + 8 + 2, y + 4, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					y += 15
-				}
-				if true
-				{
-					text("No", x, y);
-					unsafe { *DRAW_COLORS = 0x3210 };
-					sprites::draw_flag(x + 20 + 2, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					text("in", x + 30, y);
-					unsafe { *DRAW_COLORS = 0x1320 };
-					sprites::draw_tree(x + 50, y + 8, 0);
-					sprites::draw_tree(x + 50 + 4, y + 7, 0);
-					sprites::draw_tree(x + 50 + 8, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					y += 15
-				}
-				if true
-				{
-					text("No", x, y);
-					unsafe { *DRAW_COLORS = 0x3210 };
-					sprites::draw_flag(x + 20 + 2, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					text("near", x + 30, y);
-					unsafe { *DRAW_COLORS = 0x1320 };
-					sprites::draw_mountain(x + 66 + 2, y + 8, 0);
-					unsafe { *DRAW_COLORS = 0x03 };
-					y += 15
-				}
-				text("No", x, y);
-				unsafe { *DRAW_COLORS = 0x3210 };
-				sprites::draw_flag(x + 20 + 2, y + 8, 0);
-				unsafe { *DRAW_COLORS = 0x03 };
-				text("as", x + 30, y);
-				unsafe { *DRAW_COLORS = 0x3210 };
-				sprites::draw_flag(x + 50 + 2, y + 8, 1);
-				unsafe { *DRAW_COLORS = 0x03 };
 				y = 139;
+				unsafe { *DRAW_COLORS = 0x03 };
 				text("Tribute:", x, y);
 				draw_threat_value(self.tribute, x + 67, y);
 				unsafe { *DRAW_COLORS = 0x3210 };

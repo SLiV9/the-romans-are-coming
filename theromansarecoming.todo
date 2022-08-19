@@ -25,7 +25,8 @@ Content:
     ☐ Hele kleine regions cullen
   ☐ Mini-objectives
   ☐ Imperial decrees
-    ☐ Detect when placement is impossible
+    ✘ Detect when placement is impossible @cancelled (2022-08-19 15:46)
+    ☐ Each level has its own hardcoded decrees in sequence
   ☐ Tutorial / difficulty curve
   ✔ Transition occupation smoothly (replace is_occupied with percentage) @done (2022-08-19 13:18)
 

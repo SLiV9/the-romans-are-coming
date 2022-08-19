@@ -15,9 +15,10 @@ Mechanics:
     ✔ Costs wood and gold/stone/ore @done (2022-08-19 20:20)
     ✘ Workers in cities stay and gain you 1 gold @cancelled (2022-08-19 20:20)
     ✔ Placing workers or romans in villages should never break decrees @done (2022-08-19 20:06)
-  ☐ Feed workers every shuffle
-    ☐ If you have 0 grain, gameover
-  ☐ Fix bug with num_cards not matching remaining regions
+  ✔ Feed workers every shuffle @done (2022-08-19 21:51)
+    ✘ If you have 0 grain, gameover @cancelled (2022-08-19 21:51)
+  ✘ Fix bug with num_cards not matching remaining regions @cancelled (2022-08-19 21:51)
+    There was a tiny forest
   ✔ End of year effects @done (2022-08-19 12:11)
   ✔ Update occupation based on unchallenged romans @done (2022-08-19 13:18)
     ✘ Occupy completely surrounded clusters of mountains @cancelled (2022-08-19 12:16)
@@ -29,18 +30,18 @@ Mechanics:
 
 Content:
   ✔ Fancy map generation @done (2022-08-17 21:49)
-    ☐ Regions zonder props cullen
-    ☐ Hele kleine regions cullen
-    ☐ Regions meer convex maken / adjacency intuitiever
+    ☐ Cull regions without props
+    ☐ Cull tiny regions
+    ☐ Make regions more convex / make adjacency more intuitive
   ☐ Mini-objectives
-  ☐ Imperial decrees
+  ✔ Imperial decrees @done (2022-08-19 21:16)
     ✘ Detect when placement is impossible @cancelled (2022-08-19 15:46)
     ☐ Each level has its own hardcoded decrees in sequence
   ☐ Tutorial / difficulty curve
   ✔ Transition occupation smoothly (replace is_occupied with percentage) @done (2022-08-19 13:18)
 
 Sprites:
-  ☐ Terrain features
+  ✔ Terrain features @done (2022-08-19 21:52)
     ✔ Grass @done (2022-08-15 18:42)
     ✔ Trees @done (2022-08-15 18:42)
     ✔ Hills @done (2022-08-15 18:42)
@@ -48,7 +49,7 @@ Sprites:
     ✘ Waves @cancelled (2022-08-18 12:45)
       ✘ Add a tiny wave animation when placing a boat in water @cancelled (2022-08-18 12:45)
     ✔ Boats @done (2022-08-15 18:42)
-    ☐ Houses / city gates
+    ✔ Houses / city gates @done (2022-08-19 21:16)
     ✔ Battlefields/graves @done (2022-08-18 12:45)
       ☐ Dustclouds when fighting occurs
   ✔ Resource icons @done (2022-08-18 13:44)

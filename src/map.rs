@@ -520,7 +520,7 @@ impl Map
 				}
 				else
 				{
-					None
+					Some(TerrainType::Water)
 				};
 				let prop_type = match terrain_type
 				{
@@ -535,6 +535,7 @@ impl Map
 							None
 						}
 					}
+					Some(TerrainType::Water) => None,
 					_ => terrain_type,
 				};
 				set_on_propmap(&mut self.propmap, u, v, prop_type);

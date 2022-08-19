@@ -213,15 +213,15 @@ impl Part
 			Part::TerrainType(TerrainType::Water) =>
 			{
 				unsafe { *DRAW_COLORS = 0x20 };
-				sprites::draw_surface(x + 8 + 2, y, 0);
-				sprites::draw_surface(x + 6 + 2, y + 2, 0);
-				sprites::draw_surface(x + 10 + 2, y + 2, 0);
-				sprites::draw_surface(x + 8 + 2, y + 4, 0);
-				sprites::draw_surface(x + 6 + 2, y + 6, 0);
-				sprites::draw_surface(x + 10 + 2, y + 6, 0);
-				sprites::draw_surface(x + 8 + 2, y + 8, 0);
+				sprites::draw_surface(x + 4, y, 0);
+				sprites::draw_surface(x + 2, y + 2, 0);
+				sprites::draw_surface(x + 6, y + 2, 0);
+				sprites::draw_surface(x + 4, y + 4, 0);
+				sprites::draw_surface(x + 2, y + 6, 0);
+				sprites::draw_surface(x + 6, y + 6, 0);
+				sprites::draw_surface(x + 4, y + 8, 0);
 				unsafe { *DRAW_COLORS = 0x1320 };
-				sprites::draw_boat(x + 8 + 2, y + 4, 0);
+				sprites::draw_boat(x + 4, y + 4, 0);
 				16
 			}
 		}

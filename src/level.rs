@@ -182,7 +182,7 @@ impl Level
 		}
 		let threat_level = 0;
 		let tribute = 2;
-		let starting_grain = 20;
+		let starting_grain = 24;
 		let starting_wood = 10;
 		let starting_gold = 10;
 		Level {
@@ -691,7 +691,27 @@ impl Level
 
 	fn shuffle(&mut self)
 	{
-		let num_workers = 4;
+		let num_villages = self.region_data[0..(self.num_regions as usize)]
+			.iter()
+			.filter(|region| region.terrain_type == TerrainType::Village)
+			.filter(|region| region.marker == Some(Marker::Worker))
+			.count();
+		let num_workers = 4 + num_villages as u8;
+		if self.grain >= num_workers
+		{
+			self.grain -= num_workers;
+		}
+		else if self.grain + self.wine >= num_workers
+		{
+			self.wine += self.grain;
+			self.wine -= num_workers;
+			self.grain = 0;
+		}
+		else
+		{
+			self.grain = 0;
+			self.wine = 0;
+		}
 		let num_remaining_spaces = self.count_remaining_spaces();
 		self.num_cards = std::cmp::min(
 			num_workers + self.threat_level,

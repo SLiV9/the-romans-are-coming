@@ -69,6 +69,12 @@ enum State
 	Resolution,
 	Occupation,
 	Cleanup,
+	DecreeViolated
+	{
+		decree_offset: u8,
+	},
+	TributePaid,
+	TributeFailed,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -150,10 +156,9 @@ impl Level
 			map.fill_adjacency(&mut adjacency, &mut border_adjacency);
 			let cutoff = rng.usize(0..(num_regions as usize));
 			let roman_spawn = (0..(num_regions as usize))
-				.filter(|i| *i >= cutoff)
 				.filter(|i| border_adjacency.get(*i as usize))
-				.map(|i| i as i8)
-				.next();
+				.find(|i| *i >= cutoff)
+				.map(|i| i as i8);
 			if let Some(region_id) = roman_spawn
 			{
 				map.occupy_region(region_id);
@@ -163,7 +168,7 @@ impl Level
 				map.set_marker_in_region(region_id, Some(marker));
 			}
 		}
-		let threat_level = 2;
+		let threat_level = 0;
 		let tribute = 2;
 		Level {
 			num_regions,
@@ -331,14 +336,45 @@ impl Level
 						}
 						else
 						{
-							self.state = State::Shuffling;
+							if self.wine >= self.tribute
+							{
+								self.wine -= self.tribute;
+								self.tribute += 3;
+								self.state = State::TributePaid;
+							}
+							else
+							{
+								self.tribute += 1;
+								if self.threat_level < 9
+								{
+									self.threat_level += 1;
+								}
+								self.state = State::TributeFailed;
+							}
 						}
 						self.ticks_in_4sec = 0;
 					}
 				}
 				State::NewDecrees =>
 				{
+					// Wait for user to finish reading.
 					self.hover_preview = Some(Preview::HoverDecrees);
+				}
+				State::DecreeViolated { .. } =>
+				{
+					// Wait for user to finish reading.
+				}
+				State::TributePaid =>
+				{
+					if self.ticks_in_4sec >= 90
+					{
+						self.state = State::Shuffling;
+						self.ticks_in_4sec = 0;
+					}
+				}
+				State::TributeFailed =>
+				{
+					// Wait for user to finish reading.
 				}
 			}
 		}
@@ -434,6 +470,19 @@ impl Level
 					self.state = State::Shuffling;
 					self.ticks_in_4sec = 0;
 				}
+				State::TributePaid =>
+				{
+					self.ticks_in_4sec = 100;
+				}
+				State::DecreeViolated { .. } =>
+				{
+					self.num_decrees = 0;
+				}
+				State::TributeFailed =>
+				{
+					self.state = State::Shuffling;
+					self.ticks_in_4sec = 0;
+				}
 				_ => (),
 			}
 		}
@@ -509,7 +558,6 @@ impl Level
 			{
 				self.attack_preview.set(region_id as usize, true);
 			}
-			self.support_preview = supporters;
 		}
 		else if num_enemies + num_occupants > 0
 		{
@@ -518,7 +566,6 @@ impl Level
 				self.kill_preview = Bitmap::new();
 				self.kill_preview.set(region_id as usize, true);
 				self.attack_preview = enemies | occupants;
-				self.support_preview = supporters;
 			}
 			else
 			{
@@ -528,9 +575,9 @@ impl Level
 				{
 					self.attack_preview.set(region_id as usize, true);
 				}
-				self.support_preview = supporters;
 			}
 		}
+		self.support_preview = supporters;
 	}
 
 	fn count_remaining_spaces(&self) -> usize
@@ -552,7 +599,7 @@ impl Level
 		);
 		for i in 0..self.num_cards
 		{
-			let card = if i / 3 >= num_workers
+			let card = if 2 * (i / 3) >= num_workers
 			{
 				Card::Roman
 			}
@@ -576,11 +623,11 @@ impl Level
 	fn pick_decrees(&mut self)
 	{
 		self.num_decrees = 0;
-		self.decree_data[self.num_decrees as usize] =
-			Decree::AllWorkersAdjacent;
-		self.num_decrees += 1;
 		if self.threat_level == 0
 		{
+			let decree = Decree::NoWorkersAdjacent;
+			self.decree_data[self.num_decrees as usize] = decree;
+			self.num_decrees += 1;
 			return;
 		}
 		self.decree_data[self.num_decrees as usize] = Decree::AllRomansAdjacent;
@@ -622,7 +669,7 @@ impl Level
 						TerrainType::Grass => self.grain += 1,
 						TerrainType::Forest => self.wood += 1,
 						TerrainType::Hill => self.wine += 1,
-						TerrainType::Mountain => (),
+						TerrainType::Mountain => self.gold += 1,
 						TerrainType::Water => (),
 					}
 					(region_id, Marker::Worker)
@@ -658,7 +705,76 @@ impl Level
 				map.set_marker_in_region(i as i8, killed);
 			}
 		}
-		self.card_offset += 1;
+		let alive_marker = match marker
+		{
+			Marker::DeadRoman => Marker::Roman,
+			Marker::DeadWorker => Marker::Worker,
+			x => x,
+		};
+		let violated_decree_offset =
+			(0..(self.num_decrees as usize)).find(|offset| {
+				match self.decree_data[*offset]
+				{
+					Decree::Regional { marker: m, .. } if m != alive_marker =>
+					{
+						false
+					}
+					Decree::Regional {
+						all_or_none,
+						marker: _,
+						in_or_near,
+						terrain_type,
+					} =>
+					{
+						let matches = match in_or_near
+						{
+							InOrNear::In =>
+							{
+								self.region_data[region_id as usize]
+									.terrain_type == terrain_type
+							}
+							InOrNear::Near => self.adjacency
+								[region_id as usize]
+								.into_iter()
+								.any(|adj_id| {
+									self.region_data[adj_id].terrain_type
+										== terrain_type
+								}),
+						};
+						match all_or_none
+						{
+							AllOrNone::All => !matches,
+							AllOrNone::None => matches,
+						}
+					}
+					Decree::NoWorkersAdjacent =>
+					{
+						alive_marker == Marker::Worker
+							&& !self.support_preview.is_empty()
+					}
+					Decree::AllRomansAdjacent =>
+					{
+						alive_marker == Marker::Roman
+							&& self.support_preview.is_empty()
+					}
+					Decree::NoRomansInAmbush => marker == Marker::DeadRoman,
+				}
+			});
+		if let Some(offset) = violated_decree_offset
+		{
+			self.num_cards = 0;
+			if self.threat_level < 9
+			{
+				self.threat_level += 1;
+			}
+			self.state = State::DecreeViolated {
+				decree_offset: offset as u8,
+			};
+		}
+		else
+		{
+			self.card_offset += 1;
+		}
 	}
 
 	pub fn draw(&mut self)
@@ -702,7 +818,12 @@ impl Level
 				Some(Preview::CannotPlaceRoman) => palette::ROMAN,
 				Some(Preview::HoverDecrees) => palette::ROMAN,
 				Some(Preview::HoverObjectives) => palette::WATER,
-				None => palette::DEFAULT,
+				None => match self.state
+				{
+					State::DecreeViolated { .. } => palette::ROMAN,
+					State::TributeFailed => palette::ROMAN,
+					_ => palette::DEFAULT,
+				},
 			};
 			unsafe { *PALETTE = palette };
 		}
@@ -874,7 +995,7 @@ impl Level
 				rect(60, 20, 90, 130);
 
 				unsafe { *DRAW_COLORS = 4 };
-				let x = 64;
+				let x = 63;
 				let mut y = 25;
 				text("IMPERIAL", x + 10, y);
 				y += 8;
@@ -892,7 +1013,73 @@ impl Level
 				unsafe { *DRAW_COLORS = 0x3210 };
 				sprites::draw_wine_icon(x + 76, y - 1);
 			}
-			_ => (),
+			_ => match self.state
+			{
+				State::DecreeViolated { decree_offset } =>
+				{
+					unsafe { *DRAW_COLORS = 0x31 };
+					rect(10, 60, 140, 58);
+					unsafe { *DRAW_COLORS = 0x03 };
+					let x = 15;
+					let mut y = 60 + 6;
+					text("Imperial decrees", x, y);
+					y += 8;
+					text("are absolute!", x, y);
+					y += 15;
+					text("(", x, y);
+					let decree = &self.decree_data[decree_offset as usize];
+					let w = decree.draw(x + 8, y);
+					unsafe { *DRAW_COLORS = 0x03 };
+					text(")", x + 4 + w, y);
+					y += 15;
+					unsafe { *DRAW_COLORS = 0x40 };
+					sprites::draw_backfill(x + 49, y - 1, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					text("+1", x + 52, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_wreath_icon(x + 70, y - 1);
+					unsafe { *DRAW_COLORS = 0x03 };
+				}
+				State::TributePaid =>
+				{
+					unsafe { *DRAW_COLORS = 0x31 };
+					rect(10, 60, 140, 35);
+					unsafe { *DRAW_COLORS = 0x03 };
+					let x = 15;
+					let mut y = 60 + 6;
+					text("Tribute paid.", x, y);
+					y += 15;
+					text("New tribute:", x, y);
+					draw_threat_value(self.tribute, x + 114, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_wine_icon(x + 123, y - 1);
+				}
+				State::TributeFailed =>
+				{
+					unsafe { *DRAW_COLORS = 0x31 };
+					rect(10, 60, 140, 58);
+					unsafe { *DRAW_COLORS = 0x03 };
+					let x = 15;
+					let mut y = 60 + 6;
+					text("You dare refuse", x, y);
+					y += 8;
+					text("to pay tribute?!", x, y);
+					y += 15;
+					unsafe { *DRAW_COLORS = 0x40 };
+					sprites::draw_backfill(x + 49, y - 1, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					text("+1", x + 52, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_wreath_icon(x + 70, y - 1);
+					unsafe { *DRAW_COLORS = 0x03 };
+					y += 15;
+					text("New tribute:", x, y);
+					draw_threat_value(self.tribute, x + 114, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_wine_icon(x + 123, y - 1);
+				}
+				_ => (),
+			},
 		}
 	}
 }

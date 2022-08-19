@@ -35,18 +35,23 @@ pub enum Decree
 		terrain_type: TerrainType,
 	},
 	AllRomansAdjacent,
-	AllWorkersAdjacent,
+	NoWorkersAdjacent,
 	NoRomansInAmbush,
 }
 
 impl Decree
 {
-	pub fn draw(&self, mut x: i32, y: i32)
+	pub fn draw(&self, x: i32, y: i32) -> i32
 	{
+		let mut dx = 0;
 		for part in self.parts()
 		{
-			x += part.draw(x, y);
+			dx += part.draw(x + dx, y);
 		}
+		unsafe { *DRAW_COLORS = 0x03 };
+		text(".", x + dx - 4, y);
+		dx += 4;
+		dx
 	}
 
 	fn parts(&self) -> [Part; 4]
@@ -65,22 +70,22 @@ impl Decree
 				terrain_type.into(),
 			],
 			Decree::AllRomansAdjacent => [
-				Part::Word("All"),
-				Part::Marker(Marker::Roman),
-				Part::Word("near"),
-				Part::Marker(Marker::Roman),
+				AllOrNone::All.into(),
+				Marker::Roman.into(),
+				InOrNear::Near.into(),
+				Marker::Roman.into(),
 			],
-			Decree::AllWorkersAdjacent => [
-				Part::Word("All"),
-				Part::Marker(Marker::Worker),
-				Part::Word("near"),
-				Part::Marker(Marker::Worker),
+			Decree::NoWorkersAdjacent => [
+				AllOrNone::None.into(),
+				Marker::Worker.into(),
+				InOrNear::Near.into(),
+				Marker::Worker.into(),
 			],
 			Decree::NoRomansInAmbush => [
-				Part::Word("No"),
-				Part::Marker(Marker::Roman),
+				AllOrNone::None.into(),
+				Marker::Roman.into(),
 				Part::Word("as"),
-				Part::Marker(Marker::DeadRoman),
+				Marker::DeadRoman.into(),
 			],
 		}
 	}
@@ -170,24 +175,24 @@ impl Part
 			Part::TerrainType(TerrainType::Grass) =>
 			{
 				unsafe { *DRAW_COLORS = 0x1320 };
-				sprites::draw_grass(x, y + 8, 0);
-				sprites::draw_grass(x + 4, y + 3, 1);
-				sprites::draw_grass(x + 8, y + 8, 2);
+				sprites::draw_grass(x, y + 1, 0);
+				sprites::draw_grass(x + 4, y + 6, 4);
+				sprites::draw_grass(x + 8, y + 1, 5);
 				12
 			}
 			Part::TerrainType(TerrainType::Forest) =>
 			{
 				unsafe { *DRAW_COLORS = 0x1320 };
-				sprites::draw_tree(x, y + 8, 0);
+				sprites::draw_tree(x, y + 6, 0);
 				sprites::draw_tree(x + 4, y + 7, 0);
-				sprites::draw_tree(x + 8, y + 8, 0);
+				sprites::draw_tree(x + 8, y + 6, 0);
 				12
 			}
 			Part::TerrainType(TerrainType::Hill) =>
 			{
 				unsafe { *DRAW_COLORS = 0x1320 };
-				sprites::draw_hill(x, y + 3, 0);
-				sprites::draw_hill(x + 4, y + 8, 1);
+				sprites::draw_hill(x, y + 4, 1);
+				sprites::draw_hill(x + 3, y + 8, 0);
 				sprites::draw_hill(x + 8, y + 3, 2);
 				12
 			}

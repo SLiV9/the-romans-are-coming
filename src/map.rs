@@ -27,6 +27,7 @@ const MIN_NUM_REGIONS: usize = 25;
 const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
 const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
 const DBR_BBOX_RADIUS: i32 = 4;
+const VILLAGE_RADIUS: i32 = 15;
 
 const NOISE_OCTAVES: i32 = 5;
 const NOISE_AMPLITUDE_ELEVATION: f64 = 50.0;
@@ -408,6 +409,7 @@ impl Map
 					}
 					TerrainType::Forest => (20.0, 400.0),
 					TerrainType::Grass => (10.0, -200.0),
+					TerrainType::Village => (10.0, -200.0),
 				};
 				let x = cell.centroid_x as usize;
 				let y = cell.centroid_y as usize;
@@ -846,6 +848,71 @@ impl Map
 		}
 	}
 
+	pub fn place_village(&mut self, region_id: i8)
+	{
+		let mut centerx = 0;
+		let mut centery = 0;
+		for r in 0..GRID_SIZE
+		{
+			for c in 0..GRID_SIZE
+			{
+				match &mut self.cells[r][c].contents
+				{
+					Contents::Region {
+						region_id: rid,
+						terrain_type: tt,
+						..
+					} if *rid == region_id =>
+					{
+						*tt = TerrainType::Village;
+						centerx = self.cells[r][c].centroid_x as i32;
+						centery = self.cells[r][c].centroid_y as i32;
+					}
+					Contents::Subregion {
+						parent_region_id: rid,
+						parent_terrain_type: tt,
+						..
+					} if *rid == region_id =>
+					{
+						*tt = TerrainType::Village;
+					}
+					_ => (),
+				}
+			}
+		}
+		for v in 0..PROP_GRID_SIZE
+		{
+			for u in 0..PROP_GRID_SIZE
+			{
+				if self.prop_region_map[v][u] != region_id
+				{
+					continue;
+				}
+				if get_from_propmap(&self.propmap, u, v).is_none()
+				{
+					continue;
+				}
+				let x = (u * PROP_GRID_CELL_SIZE) as i32;
+				let y = (v * PROP_GRID_CELL_SIZE) as i32;
+				let dx = x - centerx;
+				let dy = y - centery;
+				if dx * dx + dy * dy > VILLAGE_RADIUS * VILLAGE_RADIUS
+				{
+					continue;
+				}
+				let prop = if (u + v) % 2 == 0
+				{
+					Some(TerrainType::Village)
+				}
+				else
+				{
+					None
+				};
+				set_on_propmap(&mut self.propmap, u, v, prop);
+			}
+		}
+	}
+
 	pub fn draw(
 		&self,
 		hovered_region_id: Option<i8>,
@@ -853,6 +920,7 @@ impl Map
 		kill_preview: Bitmap<MAX_NUM_REGIONS>,
 		attack_preview: Bitmap<MAX_NUM_REGIONS>,
 		support_preview: Bitmap<MAX_NUM_REGIONS>,
+		gather_preview: Bitmap<MAX_NUM_REGIONS>,
 	)
 	{
 		let mut is_empty = [false; MAX_NUM_REGIONS];
@@ -1043,6 +1111,10 @@ impl Map
 					{
 						sprites::draw_tree(x - 1, y, alt);
 					}
+					Some(TerrainType::Village) =>
+					{
+						sprites::draw_house(x - 1, y, alt);
+					}
 					Some(TerrainType::Grass) =>
 					{
 						let is_palette_bloody =
@@ -1100,6 +1172,10 @@ impl Map
 						else if support_preview.get(region_id as usize)
 						{
 							sprites::draw_supporting_town(x, y);
+						}
+						else if gather_preview.get(region_id as usize)
+						{
+							sprites::draw_gathering_town(x, y);
 						}
 					}
 					Contents::Region {
@@ -1725,6 +1801,7 @@ impl Cell
 						*n_water += 1;
 					}
 				}
+				TerrainType::Village => (),
 			},
 			_ => (),
 		}
@@ -1825,6 +1902,7 @@ fn set_on_propmap(
 	let value = match terrain_type
 	{
 		None => 0,
+		Some(TerrainType::Village) => 3,
 		Some(TerrainType::Grass) => 1,
 		Some(TerrainType::Forest) => 5,
 		Some(TerrainType::Hill) => 10,
@@ -1852,7 +1930,8 @@ fn get_from_propmap(
 	match value
 	{
 		0 => None,
-		1..=4 => Some(TerrainType::Grass),
+		1..=2 => Some(TerrainType::Grass),
+		3..=4 => Some(TerrainType::Village),
 		5..=9 => Some(TerrainType::Forest),
 		10..=11 => Some(TerrainType::Hill),
 		12..=15 => Some(TerrainType::Mountain),

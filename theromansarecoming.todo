@@ -10,16 +10,17 @@ Mechanics:
   ✔ Gather resources @done (2022-08-18 15:17)
   ✔ Create fights @done (2022-08-19 11:04)
     ✔ Preview fights when hovered @done (2022-08-18 23:18)
-  ☐ Create cities
-    ☐ Placed when adjacent to 2 or more allies
+  ✔ Create cities @done (2022-08-19 19:53)
+    ✔ Placed when adjacent to 2 or more allies @done (2022-08-19 19:53)
     ☐ Cost 5 wood and 1 stone/ore
     ☐ Workers in cities stay and gain you 1 gold
+    ☐ Placing workers or romans in villages should never break decrees
   ✔ End of year effects @done (2022-08-19 12:11)
   ✔ Update occupation based on unchallenged romans @done (2022-08-19 13:18)
     ✘ Occupy completely surrounded clusters of mountains @cancelled (2022-08-19 12:16)
     ☐ Occupy adjacent culled cells
     ✘ Occupy everything if everything is adjacent to occupation @cancelled (2022-08-19 12:16)
-  ☐ The last card on the board is a third card type
+  ✘ The last card on the board is a third card type @cancelled (2022-08-19 18:39)
     Ignores decrees, no battles, somehow forces the map to shrink
   ☐ Transition from "gameover" to next level
 

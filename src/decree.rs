@@ -172,6 +172,14 @@ impl Part
 				sprites::draw_flag(x + 2, y + 8, flag);
 				10
 			}
+			Part::TerrainType(TerrainType::Village) =>
+			{
+				unsafe { *DRAW_COLORS = 0x1320 };
+				sprites::draw_house(x, y + 5, 0);
+				sprites::draw_house(x + 4, y + 6, 0);
+				sprites::draw_house(x + 8, y + 5, 0);
+				12
+			}
 			Part::TerrainType(TerrainType::Grass) =>
 			{
 				unsafe { *DRAW_COLORS = 0x1320 };

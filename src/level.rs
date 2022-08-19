@@ -25,6 +25,7 @@ const MAX_THREAT_LEVEL: u8 = 10;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerrainType
 {
+	Village,
 	Grass,
 	Forest,
 	Hill,
@@ -114,6 +115,7 @@ pub struct Level
 	kill_preview: Bitmap<MAX_NUM_REGIONS>,
 	attack_preview: Bitmap<MAX_NUM_REGIONS>,
 	support_preview: Bitmap<MAX_NUM_REGIONS>,
+	gather_preview: Bitmap<MAX_NUM_REGIONS>,
 	card_deck: [Card; MAX_NUM_CARDS],
 	decree_data: [Decree; MAX_NUM_DECREES],
 	num_regions: u8,
@@ -181,6 +183,7 @@ impl Level
 			kill_preview: Bitmap::default(),
 			attack_preview: Bitmap::default(),
 			support_preview: Bitmap::default(),
+			gather_preview: Bitmap::default(),
 			num_cards: 0,
 			card_offset: 0,
 			card_deck: [Card::Worker; MAX_NUM_CARDS],
@@ -221,6 +224,7 @@ impl Level
 		self.kill_preview = Bitmap::new();
 		self.attack_preview = Bitmap::new();
 		self.support_preview = Bitmap::new();
+		self.gather_preview = Bitmap::new();
 		let hovered_region_id = map.determine_hovered_region_id();
 		if self.num_decrees == 0
 		{
@@ -282,6 +286,7 @@ impl Level
 						{
 							match self.region_data[i].terrain_type
 							{
+								TerrainType::Village => self.grain += 1,
 								TerrainType::Grass => self.grain += 1,
 								TerrainType::Forest => self.wood += 1,
 								TerrainType::Hill => self.wine += 1,
@@ -302,9 +307,36 @@ impl Level
 				{
 					if self.ticks_in_4sec == 1
 					{
+						let mut any = false;
 						for i in 0..(self.num_regions as usize)
 						{
 							if self.region_data[i].marker == Some(Marker::Roman)
+							{
+								let region_id = i as i8;
+								map.occupy_region(region_id);
+								let marker = Marker::Occupied;
+								self.region_data[i].marker = Some(marker);
+								map.set_marker_in_region(
+									region_id,
+									Some(marker),
+								);
+								any = true;
+							}
+						}
+						if !any
+						{
+							// Find a battlefield (empty squares are either
+							// water or had workers on them) on the border.
+							let roman_spawn = (0..(self.num_regions as usize))
+								.rev()
+								.filter(|i| self.border_adjacency.get(*i))
+								.find(|i| match self.region_data[*i].marker
+								{
+									Some(Marker::DeadRoman) => true,
+									Some(Marker::DeadWorker) => true,
+									_ => false,
+								});
+							if let Some(i) = roman_spawn
 							{
 								let region_id = i as i8;
 								map.occupy_region(region_id);
@@ -414,6 +446,7 @@ impl Level
 			{
 				let can_place = match region.terrain_type
 				{
+					TerrainType::Village => true,
 					TerrainType::Grass => true,
 					TerrainType::Forest => true,
 					TerrainType::Hill => true,
@@ -542,8 +575,11 @@ impl Level
 			{
 				(Some(Marker::Worker), Card::Worker) =>
 				{
-					supporters.set(i, true);
-					num_supporters += 1;
+					if self.region_data[i].terrain_type != TerrainType::Village
+					{
+						supporters.set(i, true);
+						num_supporters += 1;
+					}
 				}
 				(Some(Marker::Roman), Card::Worker) =>
 				{
@@ -587,6 +623,7 @@ impl Level
 			{
 				self.attack_preview.set(region_id as usize, true);
 			}
+			self.support_preview = supporters;
 		}
 		else if num_enemies + num_occupants > 0
 		{
@@ -605,8 +642,12 @@ impl Level
 					self.attack_preview.set(region_id as usize, true);
 				}
 			}
+			self.support_preview = supporters;
 		}
-		self.support_preview = supporters;
+		else
+		{
+			self.gather_preview = supporters;
+		}
 	}
 
 	fn count_remaining_spaces(&self) -> usize
@@ -668,7 +709,7 @@ impl Level
 				all_or_none: AllOrNone::None,
 				marker: Marker::Roman,
 				in_or_near: InOrNear::In,
-				terrain_type: TerrainType::Mountain,
+				terrain_type: TerrainType::Village,
 			};
 			self.decree_data[self.num_decrees as usize] = decree;
 			self.num_decrees += 1;
@@ -691,10 +732,56 @@ impl Level
 				{
 					(region_id, Marker::DeadWorker)
 				}
+				else if terrain_type == TerrainType::Grass
+					&& self.gather_preview.len() >= 2
+				{
+					self.grain += 1;
+					for j in self.gather_preview.into_iter()
+					{
+						if self.region_data[j].marker != Some(Marker::Worker)
+						{
+							continue;
+						}
+						match self.region_data[j].terrain_type
+						{
+							TerrainType::Village => (),
+							TerrainType::Grass => self.grain += 1,
+							TerrainType::Forest => self.wood += 1,
+							TerrainType::Hill => self.wine += 1,
+							TerrainType::Mountain => self.gold += 1,
+							TerrainType::Water => (),
+						}
+					}
+					map.place_village(region_id);
+					self.region_data[region_id as usize].terrain_type =
+						TerrainType::Village;
+					(region_id, Marker::Worker)
+				}
 				else
 				{
 					match terrain_type
 					{
+						TerrainType::Village =>
+						{
+							self.grain += 1;
+							for j in self.gather_preview.into_iter()
+							{
+								if self.region_data[j].marker
+									!= Some(Marker::Worker)
+								{
+									continue;
+								}
+								match self.region_data[j].terrain_type
+								{
+									TerrainType::Village => (),
+									TerrainType::Grass => self.grain += 1,
+									TerrainType::Forest => self.wood += 1,
+									TerrainType::Hill => self.wine += 1,
+									TerrainType::Mountain => self.gold += 1,
+									TerrainType::Water => (),
+								}
+							}
+						}
 						TerrainType::Grass => self.grain += 1,
 						TerrainType::Forest => self.wood += 1,
 						TerrainType::Hill => self.wine += 1,
@@ -779,12 +866,14 @@ impl Level
 					Decree::NoWorkersAdjacent =>
 					{
 						alive_marker == Marker::Worker
-							&& !self.support_preview.is_empty()
+							&& (!self.support_preview.is_empty()
+								|| !self.gather_preview.is_empty())
 					}
 					Decree::AllRomansAdjacent =>
 					{
 						alive_marker == Marker::Roman
 							&& self.support_preview.is_empty()
+							&& self.gather_preview.is_empty()
 					}
 					Decree::NoRomansInAmbush => marker == Marker::DeadRoman,
 				}
@@ -820,6 +909,7 @@ impl Level
 						TerrainType::Hill => palette::WINE,
 						TerrainType::Forest => palette::NATURE,
 						TerrainType::Grass => palette::GOLD,
+						TerrainType::Village => palette::GOLD,
 					}
 				}
 				Some(Preview::PlaceWorker {
@@ -840,6 +930,7 @@ impl Level
 							TerrainType::Hill => palette::WINE,
 							TerrainType::Forest => palette::NATURE,
 							TerrainType::Grass => palette::GOLD,
+							TerrainType::Village => palette::GOLD,
 						}
 					}
 				}
@@ -883,6 +974,7 @@ impl Level
 				self.kill_preview,
 				self.attack_preview,
 				self.support_preview,
+				self.gather_preview,
 			);
 		}
 
@@ -935,6 +1027,7 @@ impl Level
 			{
 				let x = match terrain_type
 				{
+					TerrainType::Village => 0,
 					TerrainType::Grass => UI_X_GRAIN,
 					TerrainType::Forest => UI_X_WOOD,
 					TerrainType::Hill => UI_X_WINE,
@@ -952,6 +1045,7 @@ impl Level
 				{
 					let x = match terrain_type
 					{
+						TerrainType::Village => UI_X_GRAIN,
 						TerrainType::Grass => UI_X_GRAIN,
 						TerrainType::Forest => UI_X_WOOD,
 						TerrainType::Hill => UI_X_WINE,

@@ -615,7 +615,7 @@ impl Level
 		{
 			self.kill_preview = enemies;
 			self.attack_preview = Bitmap::new();
-			if supporters.len() == 0
+			if num_supporters == 0
 			{
 				self.kill_preview.set(region_id as usize, true);
 			}
@@ -637,7 +637,11 @@ impl Level
 			{
 				self.kill_preview = enemies;
 				self.attack_preview = Bitmap::new();
-				if num_enemies > 0
+				if num_occupants > 0
+				{
+					self.kill_preview.set(region_id as usize, true);
+				}
+				else if num_enemies > 0
 				{
 					self.attack_preview.set(region_id as usize, true);
 				}

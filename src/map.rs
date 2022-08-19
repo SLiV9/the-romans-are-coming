@@ -32,7 +32,7 @@ const NOISE_OCTAVES: i32 = 5;
 const NOISE_AMPLITUDE_ELEVATION: f64 = 50.0;
 const NOISE_AMPLITUDE_ELEVATION_MAGIC: f64 = 25.0;
 const NOISE_AMPLITUDE_FOREST: f64 = 50.0;
-const NOISE_AMPLITUDE_OCCUPATION: f64 = 50.0;
+const NOISE_AMPLITUDE_OCCUPATION: f64 = 0.25;
 const NOISE_FREQUENCY_ELEVATION: f64 = 1.0;
 const NOISE_FREQUENCY_FOREST: f64 = 1.0;
 const NOISE_FREQUENCY_OCCUPATION: f64 = 2.0;
@@ -341,7 +341,7 @@ impl Map
 							terrain_type,
 							region_id: num_regions,
 							marker: None,
-							is_occupied: false,
+							occupation_percentage: 0,
 						};
 						num_regions += 1;
 					}
@@ -373,13 +373,14 @@ impl Map
 							cell.contents = Contents::Subregion {
 								parent_region_id,
 								parent_terrain_type,
-								is_occupied: false,
+								occupation_percentage: 0,
 							};
 						}
 						else
 						{
-							cell.contents =
-								Contents::Culled { is_occupied: false };
+							cell.contents = Contents::Culled {
+								occupation_percentage: 0,
+							};
 						}
 					}
 					_ => (),
@@ -646,7 +647,7 @@ impl Map
 		}
 	}
 
-	pub fn update_occupation_map(&mut self)
+	pub fn update_occupation_map(&mut self, percentage: u8)
 	{
 		for y in 0..MAP_SIZE
 		{
@@ -669,26 +670,40 @@ impl Map
 					{
 						false
 					}
-					else if distance < 4.0
+					else
 					{
-						true
-					}
-					else if distance < 4.0 + 10.0
-					{
-						if let Some(gen) = &self.occupation_noise
+						let p = self.cells[r][c]
+							.update_occupation_percentage(percentage);
+						let min_distance = if p >= 100
 						{
-							let noise =
-								gen.get_noise(x as f64 + 0.5, y as f64 + 0.5);
-							10.0 * (distance - 4.0) + noise < 0.0
+							4.0
+						}
+						else
+						{
+							4.0 * 0.01 * (p as f64)
+						};
+						if distance < min_distance
+						{
+							true
+						}
+						else if distance < min_distance + 20.0
+						{
+							if let Some(gen) = &self.occupation_noise
+							{
+								let noise = gen
+									.get_noise(x as f64 + 0.5, y as f64 + 0.5)
+									.clamp(-2.0, 2.0);
+								distance < min_distance + noise
+							}
+							else
+							{
+								false
+							}
 						}
 						else
 						{
 							false
 						}
-					}
-					else
-					{
-						false
 					}
 				};
 				if draw
@@ -723,7 +738,7 @@ impl Map
 					region_id,
 					terrain_type,
 					marker: _,
-					is_occupied: _,
+					occupation_percentage: _,
 				} => Some((region_id, terrain_type)),
 				Contents::Subregion { .. } => None,
 				Contents::Culled { .. } => None,
@@ -811,19 +826,19 @@ impl Map
 				{
 					Contents::Region {
 						region_id: r,
-						is_occupied,
+						occupation_percentage,
 						..
 					} if *r == region_id =>
 					{
-						*is_occupied = true;
+						*occupation_percentage = 1;
 					}
 					Contents::Subregion {
 						parent_region_id: r,
-						is_occupied,
+						occupation_percentage,
 						..
 					} if *r == region_id =>
 					{
-						*is_occupied = true;
+						*occupation_percentage = 1;
 					}
 					_ => (),
 				}
@@ -850,12 +865,12 @@ impl Map
 					Contents::Region {
 						region_id,
 						marker,
-						is_occupied,
+						occupation_percentage,
 						terrain_type: _,
 					} =>
 					{
 						is_empty[region_id as usize] =
-							marker.is_none() && !is_occupied;
+							marker.is_none() && occupation_percentage == 0;
 					}
 					_ => (),
 				}
@@ -1186,13 +1201,10 @@ impl Map
 	fn closest_occupied_rc_to_xy(&self, x: i32, y: i32) -> (usize, usize, f64)
 	{
 		let (r0, c0) = self.r0_c0_for_xy(x, y);
-		if self.cells[r0][c0].is_occupied()
+		let is_enclosed = self.cells[r0][c0].is_occupied()
 			&& self.cells[r0][c0 + 1].is_occupied()
 			&& self.cells[r0 + 1][c0].is_occupied()
-			&& self.cells[r0 + 1][c0 + 1].is_occupied()
-		{
-			return (r0, c0, 0.0);
-		}
+			&& self.cells[r0 + 1][c0 + 1].is_occupied();
 		(0..4)
 			.map(|i| {
 				let r = r0 + 1 - i / 2;
@@ -1208,7 +1220,11 @@ impl Map
 			})
 			.min_by_key(|(_r, _c, sqdis)| *sqdis)
 			.map(|(r, c, sqdis)| {
-				if self.cells[r][c].is_occupied()
+				if is_enclosed
+				{
+					(r, c, (sqdis as f64).sqrt().min(3.99))
+				}
+				else if self.cells[r][c].is_occupied()
 				{
 					(r, c, (sqdis as f64).sqrt())
 				}
@@ -1412,7 +1428,9 @@ impl Map
 		else
 		{
 			// If we could not merge, cull it.
-			self.cells[r][c].contents = Contents::Culled { is_occupied: false };
+			self.cells[r][c].contents = Contents::Culled {
+				occupation_percentage: 0,
+			};
 		}
 	}
 
@@ -1551,20 +1569,20 @@ enum Contents
 	},
 	Culled
 	{
-		is_occupied: bool,
+		occupation_percentage: u8,
 	},
 	Region
 	{
 		region_id: i8,
 		terrain_type: TerrainType,
 		marker: Option<Marker>,
-		is_occupied: bool,
+		occupation_percentage: u8,
 	},
 	Subregion
 	{
 		parent_region_id: i8,
 		parent_terrain_type: TerrainType,
-		is_occupied: bool,
+		occupation_percentage: u8,
 	},
 }
 
@@ -1588,10 +1606,50 @@ impl Cell
 	{
 		match self.contents
 		{
-			Contents::Culled { is_occupied, .. } => is_occupied,
-			Contents::Region { is_occupied, .. } => is_occupied,
-			Contents::Subregion { is_occupied, .. } => is_occupied,
+			Contents::Culled {
+				occupation_percentage,
+				..
+			}
+			| Contents::Region {
+				occupation_percentage,
+				..
+			}
+			| Contents::Subregion {
+				occupation_percentage,
+				..
+			} => occupation_percentage > 0,
 			_ => false,
+		}
+	}
+
+	fn update_occupation_percentage(&mut self, percentage: u8) -> u8
+	{
+		match &mut self.contents
+		{
+			Contents::Culled {
+				occupation_percentage,
+				..
+			}
+			| Contents::Region {
+				occupation_percentage,
+				..
+			}
+			| Contents::Subregion {
+				occupation_percentage,
+				..
+			} =>
+			{
+				if *occupation_percentage < percentage
+				{
+					*occupation_percentage = percentage;
+					percentage
+				}
+				else
+				{
+					*occupation_percentage
+				}
+			}
+			_ => 0,
 		}
 	}
 
@@ -1726,7 +1784,9 @@ impl Cell
 		}
 		else
 		{
-			self.contents = Contents::Culled { is_occupied: false };
+			self.contents = Contents::Culled {
+				occupation_percentage: 0,
+			};
 		}
 	}
 }

@@ -63,6 +63,7 @@ enum State
 	Placement,
 	Shuffling,
 	Resolution,
+	Occupation,
 	Cleanup,
 }
 
@@ -108,7 +109,7 @@ pub struct Level
 	wine: u8,
 	gold: u8,
 	score: u16,
-	ticks_in_second: u8,
+	ticks_in_4sec: u8,
 	previous_gamepad: u8,
 	previous_mousebuttons: u8,
 	state: State,
@@ -147,7 +148,7 @@ impl Level
 			if let Some(region_id) = roman_spawn
 			{
 				map.occupy_region(region_id);
-				map.update_occupation_map();
+				map.update_occupation_map(100);
 				let marker = Marker::Occupied;
 				region_data[region_id as usize].marker = Some(marker);
 				map.set_marker_in_region(region_id, Some(marker));
@@ -171,7 +172,7 @@ impl Level
 			wine: 0,
 			gold: 0,
 			score: 0,
-			ticks_in_second: 0,
+			ticks_in_4sec: 0,
 			previous_gamepad: 0,
 			previous_mousebuttons: 0,
 			hover_preview: None,
@@ -207,7 +208,7 @@ impl Level
 				State::Setup =>
 				{
 					self.state = State::Shuffling;
-					self.ticks_in_second = 0;
+					self.ticks_in_4sec = 0;
 				}
 				State::Placement =>
 				{
@@ -219,11 +220,11 @@ impl Level
 					{
 						self.state = State::Shuffling;
 					}
-					self.ticks_in_second = 0;
+					self.ticks_in_4sec = 0;
 				}
 				State::Shuffling =>
 				{
-					if self.ticks_in_second == 30
+					if self.ticks_in_4sec == 30
 					{
 						self.shuffle();
 						self.state = State::Placement;
@@ -231,7 +232,7 @@ impl Level
 				}
 				State::Resolution =>
 				{
-					if self.ticks_in_second == 20
+					if self.ticks_in_4sec == 20
 					{
 						let survivor =
 							(0..(self.num_regions as usize)).find(|i| {
@@ -253,17 +254,56 @@ impl Level
 						}
 						else
 						{
-							self.state = State::Cleanup;
+							self.state = State::Occupation;
 						}
-						self.ticks_in_second = 0;
+						self.ticks_in_4sec = 0;
+					}
+				}
+				State::Occupation =>
+				{
+					if self.ticks_in_4sec == 1
+					{
+						for i in 0..(self.num_regions as usize)
+						{
+							if self.region_data[i].marker == Some(Marker::Roman)
+							{
+								let region_id = i as i8;
+								map.occupy_region(region_id);
+								let marker = Marker::Occupied;
+								self.region_data[i].marker = Some(marker);
+								map.set_marker_in_region(
+									region_id,
+									Some(marker),
+								);
+							}
+						}
+					}
+					else if self.ticks_in_4sec >= 30
+						&& self.ticks_in_4sec <= 50
+						&& self.ticks_in_4sec % 2 == 0
+					{
+						let percentage = 5 * (self.ticks_in_4sec - 30);
+						map.update_occupation_map(percentage);
+					}
+					else if self.ticks_in_4sec >= 80
+					{
+						map.update_occupation_map(100);
+						self.state = State::Cleanup;
+						self.ticks_in_4sec = 0;
 					}
 				}
 				State::Cleanup =>
 				{
-					if self.ticks_in_second == 5
+					if self.ticks_in_4sec == 5
 					{
-						let trash = (0..(self.num_regions as usize))
-							.find(|i| self.region_data[*i].marker.is_some());
+						let trash = (0..(self.num_regions as usize)).find(
+							|i| match self.region_data[*i].marker
+							{
+								Some(Marker::Occupied) => false,
+								Some(_) => true,
+								None => false,
+							},
+						);
 						if let Some(i) = trash
 						{
 							self.region_data[i].marker = None;
@@ -273,7 +313,7 @@ impl Level
 						{
 							self.state = State::Shuffling;
 						}
-						self.ticks_in_second = 0;
+						self.ticks_in_4sec = 0;
 					}
 				}
 			}
@@ -354,10 +394,10 @@ impl Level
 			self.place_marker(map);
 		}
 
-		self.ticks_in_second += 1;
-		if self.ticks_in_second == 60
+		self.ticks_in_4sec += 1;
+		if self.ticks_in_4sec == 240
 		{
-			self.ticks_in_second = 0;
+			self.ticks_in_4sec = 0;
 		}
 		self.previous_gamepad = gamepad;
 		self.previous_mousebuttons = mousebuttons;

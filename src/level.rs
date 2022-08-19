@@ -20,6 +20,8 @@ pub const MAX_NUM_REGIONS: usize = 35;
 pub const MAX_NUM_CARDS: usize = 20;
 pub const MAX_NUM_DECREES: usize = 6;
 
+const MAX_THREAT_LEVEL: u8 = 10;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerrainType
 {
@@ -75,6 +77,7 @@ enum State
 	},
 	TributePaid,
 	TributeFailed,
+	GameOver,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -223,7 +226,18 @@ impl Level
 		{
 			self.num_cards = 0;
 			self.pick_decrees();
-			self.state = State::NewDecrees;
+			if self.threat_level < MAX_THREAT_LEVEL
+			{
+				self.state = State::NewDecrees;
+			}
+			else
+			{
+				for i in 0..self.num_regions
+				{
+					map.occupy_region(i as i8);
+				}
+				self.state = State::Occupation;
+			}
 			self.ticks_in_4sec = 0;
 		}
 		else if active_card.is_none()
@@ -313,7 +327,14 @@ impl Level
 					else if self.ticks_in_4sec >= 80
 					{
 						map.update_occupation_map(100);
-						self.state = State::Cleanup;
+						if self.threat_level < MAX_THREAT_LEVEL
+						{
+							self.state = State::Cleanup;
+						}
+						else
+						{
+							self.state = State::GameOver;
+						}
 						self.ticks_in_4sec = 0;
 					}
 				}
@@ -345,9 +366,13 @@ impl Level
 							else
 							{
 								self.tribute += 1;
-								if self.threat_level < 9
+								if self.threat_level < MAX_THREAT_LEVEL
 								{
 									self.threat_level += 1;
+								}
+								else
+								{
+									self.num_decrees = 0;
 								}
 								self.state = State::TributeFailed;
 							}
@@ -373,6 +398,10 @@ impl Level
 					}
 				}
 				State::TributeFailed =>
+				{
+					// Wait for user to finish reading.
+				}
+				State::GameOver =>
 				{
 					// Wait for user to finish reading.
 				}
@@ -763,7 +792,7 @@ impl Level
 		if let Some(offset) = violated_decree_offset
 		{
 			self.num_cards = 0;
-			if self.threat_level < 9
+			if self.threat_level < MAX_THREAT_LEVEL
 			{
 				self.threat_level += 1;
 			}
@@ -822,6 +851,7 @@ impl Level
 				{
 					State::DecreeViolated { .. } => palette::ROMAN,
 					State::TributeFailed => palette::ROMAN,
+					State::GameOver => palette::ROMAN,
 					_ => palette::DEFAULT,
 				},
 			};
@@ -969,7 +999,14 @@ impl Level
 		unsafe { *DRAW_COLORS = 0x3210 };
 		sprites::draw_wreath_icon((SCREEN_SIZE as i32) - 17, 0);
 		unsafe { *DRAW_COLORS = 3 };
-		draw_threat_value(self.threat_level, (SCREEN_SIZE as i32) - 8, 1);
+		if self.threat_level < MAX_THREAT_LEVEL
+		{
+			draw_threat_value(self.threat_level, (SCREEN_SIZE as i32) - 8, 1);
+		}
+		else
+		{
+			text("X", (SCREEN_SIZE as i32) - 8, 1);
+		}
 
 		match self.hover_preview
 		{

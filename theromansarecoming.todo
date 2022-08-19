@@ -11,6 +11,7 @@ Mechanics:
   ✔ Create fights @done (2022-08-19 11:04)
     ✔ Preview fights when hovered @done (2022-08-18 23:18)
   ☐ Create cities
+    ☐ Placed when adjacent to 2 or more allies
     ☐ Cost 5 wood and 1 stone/ore
     ☐ Workers in cities stay and gain you 1 gold
   ✔ End of year effects @done (2022-08-19 12:11)
@@ -18,11 +19,15 @@ Mechanics:
     ✘ Occupy completely surrounded clusters of mountains @cancelled (2022-08-19 12:16)
     ☐ Occupy adjacent culled cells
     ✘ Occupy everything if everything is adjacent to occupation @cancelled (2022-08-19 12:16)
+  ☐ The last card on the board is a third card type
+    Ignores decrees, no battles, somehow forces the map to shrink
+  ☐ Transition from "gameover" to next level
 
 Content:
   ✔ Fancy map generation @done (2022-08-17 21:49)
     ☐ Regions zonder props cullen
     ☐ Hele kleine regions cullen
+    ☐ Regions meer convex maken / adjacency intuitiever
   ☐ Mini-objectives
   ☐ Imperial decrees
     ✘ Detect when placement is impossible @cancelled (2022-08-19 15:46)
@@ -50,6 +55,7 @@ Sprites:
     ✔ Points @done (2022-08-18 13:44)
     ✔ Laurels @done (2022-08-18 13:44)
   ☐ Map of roman empire
+  ☐ Roman wreath on title screen?
 
 Audio:
   ☐ Resource gathering

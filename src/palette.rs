@@ -16,6 +16,7 @@ pub const YELLOW: u32 = 0xe0b94a;
 pub const GREEN: u32 = 0x9cb35d;
 pub const PURPLE: u32 = 0x9b6970;
 pub const RED: u32 = 0xda995e;
+pub const BLUE: u32 = 0xa7a79e;
 
 pub const ALT_PAPER: u32 = 0xd3b288;
 pub const ALT_BROWN: u32 = 0xbc9171;
@@ -28,6 +29,7 @@ pub const BLOOD: [u32; 4] = [PAPER, BROWN, BLACK, RED];
 pub const GOLD: [u32; 4] = [PAPER, BROWN, BLACK, YELLOW];
 pub const NATURE: [u32; 4] = [PAPER, BROWN, BLACK, GREEN];
 pub const WINE: [u32; 4] = [PAPER, BROWN, BLACK, PURPLE];
+pub const WATER: [u32; 4] = [PAPER, BROWN, BLACK, BLUE];
 pub const ROMAN: [u32; 4] = [ALT_PAPER, ALT_BROWN, ALT_BLACK, ALT_RED];
 
 pub fn setup()

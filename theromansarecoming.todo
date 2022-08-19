@@ -11,6 +11,8 @@ Mechanics:
   ✔ Create fights @done (2022-08-19 11:04)
     ✔ Preview fights when hovered @done (2022-08-18 23:18)
   ☐ Create cities
+    ☐ Cost 5 wood and 1 stone/ore
+    ☐ Workers in cities stay and gain you 1 gold
   ✔ End of year effects @done (2022-08-19 12:11)
   ✔ Update occupation based on unchallenged romans @done (2022-08-19 13:18)
     ✘ Occupy completely surrounded clusters of mountains @cancelled (2022-08-19 12:16)
@@ -62,5 +64,6 @@ Usability:
 
 Polish:
   ☐ Itch.io page
+    ☐ Preview image with a single worker surrounded by roman occupation
     ☐ Credits
   ☐ Publish to WAPM

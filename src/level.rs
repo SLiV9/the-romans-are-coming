@@ -70,6 +70,8 @@ enum State
 #[derive(Debug, Clone, Copy)]
 enum Preview
 {
+	HoverObjectives,
+	HoverDecrees,
 	HoverResource
 	{
 		terrain_type: TerrainType,
@@ -88,8 +90,8 @@ enum Preview
 
 const UI_X_GRAIN: i32 = 35;
 const UI_X_WOOD: i32 = 61;
-const UI_X_WINE: i32 = 87;
-const UI_X_GOLD: i32 = 113;
+const UI_X_WINE: i32 = 113;
+const UI_X_GOLD: i32 = 87;
 
 pub struct Level
 {
@@ -104,6 +106,7 @@ pub struct Level
 	num_cards: u8,
 	card_offset: u8,
 	threat_level: u8,
+	tribute: u8,
 	grain: u8,
 	wood: u8,
 	wine: u8,
@@ -155,6 +158,7 @@ impl Level
 			}
 		}
 		let threat_level = 2;
+		let tribute = 2;
 		Level {
 			num_regions,
 			region_data,
@@ -167,6 +171,7 @@ impl Level
 			card_offset: 0,
 			card_deck: [Card::Worker; MAX_NUM_CARDS],
 			threat_level,
+			tribute,
 			grain: 0,
 			wood: 0,
 			wine: 0,
@@ -379,6 +384,14 @@ impl Level
 						self.hover_preview =
 							Some(Preview::HoverResource { terrain_type: t });
 					}
+				}
+				if mouse_x <= 30
+				{
+					self.hover_preview = Some(Preview::HoverObjectives);
+				}
+				else if mouse_x >= (SCREEN_SIZE as i16) - 24
+				{
+					self.hover_preview = Some(Preview::HoverDecrees);
 				}
 			}
 		}
@@ -628,6 +641,8 @@ impl Level
 				}
 				Some(Preview::PlaceRoman { region_id: _ }) => palette::ROMAN,
 				Some(Preview::CannotPlaceRoman) => palette::ROMAN,
+				Some(Preview::HoverDecrees) => palette::ROMAN,
+				Some(Preview::HoverObjectives) => palette::WATER,
 				None => palette::DEFAULT,
 			};
 			unsafe { *PALETTE = palette };
@@ -736,10 +751,15 @@ impl Level
 					sprites::draw_backfill(x - 4, 0, 0);
 				}
 			}
-			Some(Preview::PlaceRoman { region_id: _ })
+			Some(Preview::HoverDecrees)
+			| Some(Preview::PlaceRoman { region_id: _ })
 			| Some(Preview::CannotPlaceRoman) =>
 			{
 				sprites::draw_backfill((SCREEN_SIZE as i32) - 24, 0, 0);
+			}
+			Some(Preview::HoverObjectives) =>
+			{
+				sprites::draw_backfill(0, 0, 0);
 			}
 			_ => (),
 		}
@@ -770,6 +790,112 @@ impl Level
 		sprites::draw_wreath_icon((SCREEN_SIZE as i32) - 17, 0);
 		unsafe { *DRAW_COLORS = 3 };
 		draw_threat_value(self.threat_level, (SCREEN_SIZE as i32) - 8, 1);
+
+		match self.hover_preview
+		{
+			Some(Preview::HoverObjectives) =>
+			{
+				unsafe { *DRAW_COLORS = 0x31 };
+				rect(20, 20, 120, 80);
+
+				unsafe { *DRAW_COLORS = 0x03 };
+				let x = 25;
+				let mut y = 25;
+				text("Banner:", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_score_icon(x + 85, y - 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text("x1", x + 95, y);
+				y += 10;
+				// TODO finish
+			}
+			Some(Preview::HoverDecrees) =>
+			{
+				unsafe { *DRAW_COLORS = 0x31 };
+				rect(60, 20, 90, 130);
+
+				unsafe { *DRAW_COLORS = 4 };
+				let x = 64;
+				let mut y = 25;
+				text("IMPERIAL", x + 10, y);
+				y += 8;
+				text("DECREE", x + 10 + 8, y);
+				unsafe { *DRAW_COLORS = 3 };
+				y += 15;
+				if true
+				{
+					text("All", x, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_flag(x + 28 + 2, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					text("near", x + 38, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_flag(x + 66 + 8 + 2, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					y += 15
+				}
+				if true
+				{
+					text("All", x, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_flag(x + 28 + 2, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					text("near", x + 38, y);
+					unsafe { *DRAW_COLORS = 0x20 };
+					sprites::draw_surface(x + 66 + 8 + 2, y, 0);
+					sprites::draw_surface(x + 66 + 6 + 2, y + 2, 0);
+					sprites::draw_surface(x + 66 + 10 + 2, y + 2, 0);
+					sprites::draw_surface(x + 66 + 8 + 2, y + 4, 0);
+					sprites::draw_surface(x + 66 + 6 + 2, y + 6, 0);
+					sprites::draw_surface(x + 66 + 10 + 2, y + 6, 0);
+					sprites::draw_surface(x + 66 + 8 + 2, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x1320 };
+					sprites::draw_boat(x + 66 + 8 + 2, y + 4, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					y += 15
+				}
+				if true
+				{
+					text("No", x, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_flag(x + 20 + 2, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					text("in", x + 30, y);
+					unsafe { *DRAW_COLORS = 0x1320 };
+					sprites::draw_tree(x + 50, y + 8, 0);
+					sprites::draw_tree(x + 50 + 4, y + 7, 0);
+					sprites::draw_tree(x + 50 + 8, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					y += 15
+				}
+				if true
+				{
+					text("No", x, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_flag(x + 20 + 2, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					text("near", x + 30, y);
+					unsafe { *DRAW_COLORS = 0x1320 };
+					sprites::draw_mountain(x + 66 + 2, y + 8, 0);
+					unsafe { *DRAW_COLORS = 0x03 };
+					y += 15
+				}
+				text("No", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_flag(x + 20 + 2, y + 8, 0);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text("as", x + 30, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_flag(x + 50 + 2, y + 8, 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				y = 139;
+				text("Tribute:", x, y);
+				draw_threat_value(self.tribute, x + 67, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_wine_icon(x + 76, y - 1);
+			}
+			_ => (),
+		}
 	}
 }
 

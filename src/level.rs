@@ -22,6 +22,13 @@ pub const MAX_NUM_DECREES: usize = 6;
 
 const MAX_THREAT_LEVEL: u8 = 10;
 
+const VILLAGE_WOOD_COST: u8 = 10;
+const VILLAGE_GOLD_COST: u8 = 5;
+const MAX_STORED_GRAIN: u8 = 20;
+const MAX_STORED_WOOD: u8 = 20;
+const MAX_STORED_WINE: u8 = 50;
+const MAX_STORED_GOLD: u8 = 20;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerrainType
 {
@@ -175,6 +182,9 @@ impl Level
 		}
 		let threat_level = 0;
 		let tribute = 2;
+		let starting_grain = 20;
+		let starting_wood = 10;
+		let starting_gold = 10;
 		Level {
 			num_regions,
 			region_data,
@@ -191,10 +201,10 @@ impl Level
 			num_decrees: 0,
 			threat_level,
 			tribute,
-			grain: 0,
-			wood: 0,
+			grain: starting_grain,
+			wood: starting_wood,
 			wine: 0,
-			gold: 0,
+			gold: starting_gold,
 			score: 0,
 			ticks_in_4sec: 0,
 			previous_gamepad: 0,
@@ -407,6 +417,22 @@ impl Level
 									self.num_decrees = 0;
 								}
 								self.state = State::TributeFailed;
+							}
+							if self.grain > MAX_STORED_GRAIN
+							{
+								self.grain = MAX_STORED_GRAIN;
+							}
+							if self.wood > MAX_STORED_WOOD
+							{
+								self.wood = MAX_STORED_WOOD;
+							}
+							if self.wine > MAX_STORED_WINE
+							{
+								self.wine = MAX_STORED_WINE;
+							}
+							if self.gold > MAX_STORED_GOLD
+							{
+								self.gold = MAX_STORED_GOLD;
 							}
 						}
 						self.ticks_in_4sec = 0;
@@ -712,8 +738,8 @@ impl Level
 			let decree = Decree::Regional {
 				all_or_none: AllOrNone::None,
 				marker: Marker::Roman,
-				in_or_near: InOrNear::In,
-				terrain_type: TerrainType::Village,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Water,
 			};
 			self.decree_data[self.num_decrees as usize] = decree;
 			self.num_decrees += 1;
@@ -738,8 +764,12 @@ impl Level
 				}
 				else if terrain_type == TerrainType::Grass
 					&& self.gather_preview.len() >= 2
+					&& self.wood >= VILLAGE_WOOD_COST
+					&& self.gold >= VILLAGE_GOLD_COST
 				{
 					self.grain += 1;
+					self.wood -= VILLAGE_WOOD_COST;
+					self.gold -= VILLAGE_GOLD_COST;
 					for j in self.gather_preview.into_iter()
 					{
 						if self.region_data[j].marker != Some(Marker::Worker)
@@ -835,6 +865,12 @@ impl Level
 			(0..(self.num_decrees as usize)).find(|offset| {
 				match self.decree_data[*offset]
 				{
+					Decree::Regional { .. }
+						if self.region_data[region_id as usize]
+							.terrain_type == TerrainType::Village =>
+					{
+						false
+					}
 					Decree::Regional { marker: m, .. } if m != alive_marker =>
 					{
 						false

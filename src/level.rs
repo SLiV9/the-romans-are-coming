@@ -197,8 +197,8 @@ impl Level
 			num_cards: 0,
 			card_offset: 0,
 			card_deck: [Card::Worker; MAX_NUM_CARDS],
-			decree_data: [Decree::AllRomansAdjacent; MAX_NUM_DECREES],
-			num_decrees: 0,
+			decree_data: [Decree::NoWorkersAdjacent; MAX_NUM_DECREES],
+			num_decrees: 1,
 			threat_level,
 			tribute,
 			grain: starting_grain,
@@ -260,8 +260,8 @@ impl Level
 			{
 				State::Setup =>
 				{
-					self.state = State::Shuffling;
-					self.ticks_in_4sec = 0;
+					// Wait for user to finish reading.
+					self.hover_preview = Some(Preview::HoverObjectives);
 				}
 				State::Placement =>
 				{
@@ -549,6 +549,12 @@ impl Level
 		{
 			match self.state
 			{
+				State::Setup =>
+				{
+					self.num_decrees = 0;
+					self.state = State::Shuffling;
+					self.ticks_in_4sec = 0;
+				}
 				State::Placement =>
 				{
 					self.place_marker(map);
@@ -787,6 +793,7 @@ impl Level
 					&& self.wood >= VILLAGE_WOOD_COST
 					&& self.gold >= VILLAGE_GOLD_COST
 				{
+					self.score += 9;
 					self.grain += 1;
 					self.wood -= VILLAGE_WOOD_COST;
 					self.gold -= VILLAGE_GOLD_COST;
@@ -1138,7 +1145,7 @@ impl Level
 		unsafe { *DRAW_COLORS = 3 };
 		draw_resource_value(self.grain, UI_X_GRAIN + 8, 1);
 		unsafe { *DRAW_COLORS = 0x3210 };
-		sprites::draw_wood_icon(UI_X_WOOD, 0);
+		sprites::draw_wood_icon(UI_X_WOOD + 1, 0);
 		unsafe { *DRAW_COLORS = 3 };
 		draw_resource_value(self.wood, UI_X_WOOD + 8, 1);
 		unsafe { *DRAW_COLORS = 0x3210 };
@@ -1167,18 +1174,83 @@ impl Level
 			Some(Preview::HoverObjectives) =>
 			{
 				unsafe { *DRAW_COLORS = 0x31 };
-				rect(20, 20, 120, 80);
+				rect(20, 20, 120, 120);
 
 				unsafe { *DRAW_COLORS = 0x03 };
 				let x = 25;
 				let mut y = 25;
-				text("Banner:", x, y);
+				text("Banner", x, y);
 				unsafe { *DRAW_COLORS = 0x3210 };
-				sprites::draw_score_icon(x + 85, y - 1);
+				sprites::draw_score_icon(x + 102, y - 1);
 				unsafe { *DRAW_COLORS = 0x03 };
-				text("x1", x + 95, y);
+				text("1", x + 94, y);
 				y += 10;
-				// TODO finish
+				text("Cost:  1", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_grain_icon(x + 66, y - 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text("/ 1", x + 78, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_wine_icon(x + 104, y - 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				y += 22;
+				text("Village", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_score_icon(x + 102, y - 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text("10", x + 86, y);
+				y += 10;
+				text("Cost: 10", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_wood_icon(x + 66, y - 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text("+ 5", x + 78, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_gold_icon(x + 104, y - 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				y += 10;
+				text("Place", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_flag(x + 46 + 2, y + 9, 2);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text("in", x + 56, y);
+				unsafe { *DRAW_COLORS = 0x1320 };
+				sprites::draw_grass(x + 76, y + 1, 0);
+				sprites::draw_grass(x + 76 + 4, y + 6, 4);
+				sprites::draw_grass(x + 76 + 8, y + 1, 5);
+				unsafe { *DRAW_COLORS = 0x03 };
+				y += 10;
+				text("with 2", x, y);
+				unsafe { *DRAW_COLORS = 0x2310 };
+				sprites::draw_gathering_town(x + 54 + 2, y + 1);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_flag(x + 64 + 2, y + 9, 2);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text(".", x + 74, y);
+				y += 10;
+				text("Once built,", x, y);
+				y += 10;
+				text("gain ", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_grain_icon(x + 36, y - 1);
+				sprites::draw_wood_icon(x + 44, y - 1);
+				sprites::draw_gold_icon(x + 52, y - 1);
+				sprites::draw_wine_icon(x + 60, y - 1);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text("of", x + 72, y);
+				unsafe { *DRAW_COLORS = 0x2310 };
+				sprites::draw_gathering_town(x + 92 + 2, y + 1);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_flag(x + 102 + 2, y + 9, 2);
+				unsafe { *DRAW_COLORS = 0x03 };
+				y += 10;
+				text("and +1", x, y);
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_flag(x + 52 + 2, y + 9, 2);
+				unsafe { *DRAW_COLORS = 0x03 };
+				text(".", x + 62, y);
+				y += 10;
+				text("Ignore decree.", x, y);
 			}
 			Some(Preview::HoverDecrees) =>
 			{

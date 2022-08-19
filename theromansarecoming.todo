@@ -33,7 +33,7 @@ Content:
     ☐ Cull regions without props
     ☐ Cull tiny regions
     ☐ Make regions more convex / make adjacency more intuitive
-  ☐ Mini-objectives
+  ✘ Mini-objectives @cancelled (2022-08-19 21:54)
   ✔ Imperial decrees @done (2022-08-19 21:16)
     ✘ Detect when placement is impossible @cancelled (2022-08-19 15:46)
     ☐ Each level has its own hardcoded decrees in sequence

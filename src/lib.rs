@@ -14,7 +14,6 @@ mod global_state;
 mod level;
 mod map;
 mod menu;
-mod music;
 mod palette;
 mod sprites;
 mod wreath;

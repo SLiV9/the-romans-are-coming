@@ -209,6 +209,7 @@ impl Map
 				{
 					erase_on_bitmap(&mut self.surface_bitmap, x, y);
 				}
+				erase_on_bitmap(&mut self.ink_bitmap, x, y);
 				self.cells[r][c].add_tally(terrain_type);
 			}
 		}

@@ -20,6 +20,7 @@ use fastrand;
 pub const MAX_NUM_REGIONS: usize = 35;
 pub const MAX_NUM_CARDS: usize = 20;
 pub const MAX_NUM_DECREES: usize = 6;
+pub const TOTAL_NUM_DECREES: usize = 23;
 
 const MAX_THREAT_LEVEL: u8 = 10;
 const MAX_TRIBUTE: u8 = 8;
@@ -129,7 +130,7 @@ pub struct Level
 	support_preview: Bitmap<MAX_NUM_REGIONS>,
 	gather_preview: Bitmap<MAX_NUM_REGIONS>,
 	card_deck: [Card; MAX_NUM_CARDS],
-	decree_data: [Decree; MAX_NUM_DECREES],
+	decree_data: [Decree; TOTAL_NUM_DECREES],
 	num_regions: u8,
 	num_cards: u8,
 	num_decrees: u8,
@@ -147,6 +148,7 @@ pub struct Level
 	state: State,
 	tutorial: Option<Tutorial>,
 	hover_preview: Option<Preview>,
+	rng: fastrand::Rng,
 }
 
 static MAP: Wrapper<Map> = Wrapper::new(Map::empty());
@@ -155,6 +157,136 @@ impl Level
 {
 	pub fn new(seed: u64) -> Level
 	{
+		let decree_data = [
+			Decree::Dummy,
+			Decree::NoRomansInAmbush,
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Water,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Grass,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Forest,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Hill,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Mountain,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Water,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Forest,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Hill,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Mountain,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Water,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Grass,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Forest,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Hill,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::Near,
+				terrain_type: TerrainType::Mountain,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Grass,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::All,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Forest,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Hill,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Worker,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Mountain,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Forest,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Hill,
+			},
+			Decree::Regional {
+				all_or_none: AllOrNone::None,
+				marker: Marker::Roman,
+				in_or_near: InOrNear::In,
+				terrain_type: TerrainType::Mountain,
+			},
+		];
 		trace(format!("seed = {}", seed));
 		let mut num_regions = 0;
 		let mut region_data = [EMPTY_REGION; MAX_NUM_REGIONS];
@@ -215,12 +347,14 @@ impl Level
 		let tutorial = match seed
 		{
 			1 => Some(Tutorial::PlaceBanners),
+			202 => Some(Tutorial::Village),
 			_ => None,
 		};
 		let threat_level = 0;
 		let tribute = match seed
 		{
 			1 => 0,
+			202 => 1,
 			_ => 2,
 		};
 		let starting_grain = match seed
@@ -230,6 +364,7 @@ impl Level
 		let starting_wood = match seed
 		{
 			1 => 0,
+			202 => 15,
 			_ => 10,
 		};
 		let starting_gold = match seed
@@ -249,7 +384,7 @@ impl Level
 			num_cards: 0,
 			card_offset: 0,
 			card_deck: [Card::Worker; MAX_NUM_CARDS],
-			decree_data: [Decree::Dummy; MAX_NUM_DECREES],
+			decree_data,
 			num_decrees: 1,
 			threat_level,
 			tribute,
@@ -264,6 +399,7 @@ impl Level
 			hover_preview: None,
 			state: State::Setup,
 			tutorial,
+			rng,
 		}
 	}
 
@@ -325,8 +461,13 @@ impl Level
 			{
 				State::Setup =>
 				{
+					self.pick_decrees();
 					if self.tutorial.is_some()
 					{
+						if self.tutorial == Some(Tutorial::Village)
+						{
+							self.tutorial = None;
+						}
 						self.state = State::NewObjectives;
 					}
 					else
@@ -736,7 +877,7 @@ impl Level
 				{
 					if self.tutorial.is_some()
 					{
-						return Some(Transition { rng_seed: 3 });
+						return Some(Transition { rng_seed: 202 });
 					}
 					else
 					{
@@ -959,13 +1100,40 @@ impl Level
 				self.decree_data[self.num_decrees as usize] = decree;
 				self.num_decrees += 1;
 			}
+			self.decree_data[self.num_decrees as usize] =
+				Decree::NoRomansInAmbush;
+			self.num_decrees += 1;
 		}
 		else
 		{
-			// TODO
+			let difficulty_level = match self.threat_level
+			{
+				0..=1 => 0,
+				2..=3 => 1,
+				4..=5 => 2,
+				6 => 3,
+				7.. => 4,
+			};
+			self.rng.shuffle(
+				&mut self.decree_data
+					[(self.num_decrees as usize)..TOTAL_NUM_DECREES],
+			);
+			self.num_decrees += difficulty_level;
+			if let Some(offset) = self
+				.decree_data
+				.iter()
+				.position(|decree| *decree == Decree::NoRomansInAmbush)
+			{
+				if offset != self.num_decrees as usize
+				{
+					self.decree_data[offset] =
+						self.decree_data[self.num_decrees as usize];
+					self.decree_data[self.num_decrees as usize] =
+						Decree::NoRomansInAmbush;
+				}
+			}
+			self.num_decrees += 1;
 		}
-		self.decree_data[self.num_decrees as usize] = Decree::NoRomansInAmbush;
-		self.num_decrees += 1;
 	}
 
 	fn place_marker(&mut self, map: &mut Map)

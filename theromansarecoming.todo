@@ -25,7 +25,7 @@ Mechanics:
     ✘ Occupy everything if everything is adjacent to occupation @cancelled (2022-08-19 12:16)
   ✘ The last card on the board is a third card type @cancelled (2022-08-19 18:39)
     Ignores decrees, no battles, somehow forces the map to shrink
-  ☐ Transition from "gameover" to next level
+  ✔ Transition from "gameover" to next level @done (2022-08-21 01:13)
 
 Content:
   ✔ Fancy map generation @done (2022-08-17 21:49)
@@ -35,7 +35,7 @@ Content:
   ✘ Mini-objectives @cancelled (2022-08-19 21:54)
   ✔ Imperial decrees @done (2022-08-19 21:16)
     ✘ Detect when placement is impossible @cancelled (2022-08-19 15:46)
-    ☐ Each level has its own hardcoded decrees in sequence
+    ✘ Each level has its own hardcoded decrees in sequence @cancelled (2022-08-21 01:46)
   ✔ Tutorial / difficulty curve @done (2022-08-21 00:44)
   ✔ Transition occupation smoothly (replace is_occupied with percentage) @done (2022-08-19 13:18)
   ☐ Or curate a selection of level seeds

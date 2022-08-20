@@ -104,6 +104,7 @@ pub enum Tutorial
 	FirstKill,
 	RomansHaveCome,
 	Tribute,
+	Village,
 }
 
 impl Tutorial
@@ -297,6 +298,7 @@ impl Tutorial
 				];
 				draw_parts(parts, x, y);
 			}
+			Tutorial::Village => (),
 		}
 	}
 }

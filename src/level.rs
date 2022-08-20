@@ -7,6 +7,7 @@
 use crate::wasm4::*;
 
 use crate::decree::Decree;
+use crate::decree::Tutorial;
 use crate::decree::{AllOrNone, InOrNear};
 use crate::global_state::Wrapper;
 use crate::map::Map;
@@ -86,6 +87,7 @@ enum State
 	},
 	TributePaid,
 	TributeFailed,
+	TributeSkipped,
 	GameOver,
 }
 
@@ -141,6 +143,7 @@ pub struct Level
 	previous_gamepad: u8,
 	previous_mousebuttons: u8,
 	state: State,
+	tutorial: Option<Tutorial>,
 	hover_preview: Option<Preview>,
 }
 
@@ -150,6 +153,7 @@ impl Level
 {
 	pub fn new(seed: u64) -> Level
 	{
+		trace(format!("seed = {}", seed));
 		let mut num_regions = 0;
 		let mut region_data = [EMPTY_REGION; MAX_NUM_REGIONS];
 		let mut adjacency = [Bitmap::default(); MAX_NUM_REGIONS];
@@ -190,11 +194,31 @@ impl Level
 				map.set_marker_in_region(region_id, Some(marker));
 			}
 		}
+		let tutorial = match seed
+		{
+			1 => Some(Tutorial::PlaceBanners),
+			_ => None,
+		};
 		let threat_level = 0;
-		let tribute = 2;
-		let starting_grain = 24;
-		let starting_wood = 10;
-		let starting_gold = 10;
+		let tribute = match seed
+		{
+			1 => 0,
+			_ => 2,
+		};
+		let starting_grain = match seed
+		{
+			_ => 24,
+		};
+		let starting_wood = match seed
+		{
+			1 => 0,
+			_ => 10,
+		};
+		let starting_gold = match seed
+		{
+			1 => 0,
+			_ => 10,
+		};
 		Level {
 			num_regions,
 			region_data,
@@ -207,7 +231,7 @@ impl Level
 			num_cards: 0,
 			card_offset: 0,
 			card_deck: [Card::Worker; MAX_NUM_CARDS],
-			decree_data: [Decree::NoWorkersAdjacent; MAX_NUM_DECREES],
+			decree_data: [Decree::Dummy; MAX_NUM_DECREES],
 			num_decrees: 1,
 			threat_level,
 			tribute,
@@ -221,6 +245,7 @@ impl Level
 			previous_mousebuttons: 0,
 			hover_preview: None,
 			state: State::Setup,
+			tutorial,
 		}
 	}
 
@@ -257,7 +282,12 @@ impl Level
 		{
 			self.num_cards = 0;
 			self.pick_decrees();
-			if self.threat_level < MAX_THREAT_LEVEL
+
+			if self.decree_data[0] == Decree::Dummy
+			{
+				self.state = State::Shuffling;
+			}
+			else if self.threat_level < MAX_THREAT_LEVEL
 			{
 				self.state = State::NewDecrees;
 			}
@@ -277,7 +307,14 @@ impl Level
 			{
 				State::Setup =>
 				{
-					self.state = State::Shuffling;
+					if self.tutorial.is_some()
+					{
+						self.state = State::NewObjectives;
+					}
+					else
+					{
+						self.state = State::Shuffling;
+					}
 					self.ticks_in_4sec = 0;
 				}
 				State::NewObjectives =>
@@ -421,7 +458,11 @@ impl Level
 						}
 						else
 						{
-							if self.wine >= self.tribute
+							if self.tribute == 0
+							{
+								self.state = State::TributeSkipped;
+							}
+							else if self.wine >= self.tribute
 							{
 								self.wine -= self.tribute;
 								self.tribute += 3;
@@ -469,7 +510,7 @@ impl Level
 				{
 					// Wait for user to finish reading.
 				}
-				State::TributePaid =>
+				State::TributePaid | State::TributeSkipped =>
 				{
 					if self.ticks_in_4sec >= 90
 					{
@@ -568,6 +609,8 @@ impl Level
 
 		if (mousebuttons & MOUSE_LEFT != 0)
 			&& (self.previous_mousebuttons & MOUSE_LEFT == 0)
+			|| (gamepad & BUTTON_1 != 0)
+				&& (self.previous_gamepad & BUTTON_1 == 0)
 		{
 			match self.state
 			{
@@ -586,7 +629,7 @@ impl Level
 					self.state = State::Shuffling;
 					self.ticks_in_4sec = 0;
 				}
-				State::TributePaid =>
+				State::TributePaid | State::TributeSkipped =>
 				{
 					self.ticks_in_4sec = 100;
 				}
@@ -771,6 +814,16 @@ impl Level
 	fn pick_decrees(&mut self)
 	{
 		self.num_decrees = 0;
+		match self.tutorial
+		{
+			Some(Tutorial::PlaceBanners) =>
+			{
+				self.decree_data[self.num_decrees as usize] = Decree::Dummy;
+				self.num_decrees += 1;
+				return;
+			}
+			_ => (),
+		}
 		if self.threat_level == 0
 		{
 			let decree = Decree::NoWorkersAdjacent;
@@ -876,7 +929,6 @@ impl Level
 			}
 			Some(Preview::PlaceRoman { region_id }) =>
 			{
-				self.score += 1;
 				if self.kill_preview.get(region_id as usize)
 				{
 					(region_id, Marker::DeadRoman)
@@ -965,6 +1017,7 @@ impl Level
 							&& self.gather_preview.is_empty()
 					}
 					Decree::NoRomansInAmbush => marker == Marker::DeadRoman,
+					Decree::Dummy => false,
 				}
 			});
 		if let Some(offset) = violated_decree_offset
@@ -1167,7 +1220,7 @@ impl Level
 		unsafe { *DRAW_COLORS = 3 };
 		draw_resource_value(self.grain, UI_X_GRAIN + 8, 1);
 		unsafe { *DRAW_COLORS = 0x3210 };
-		sprites::draw_wood_icon(UI_X_WOOD + 1, 0);
+		sprites::draw_wood_icon(UI_X_WOOD, 0);
 		unsafe { *DRAW_COLORS = 3 };
 		draw_resource_value(self.wood, UI_X_WOOD + 8, 1);
 		unsafe { *DRAW_COLORS = 0x3210 };
@@ -1193,6 +1246,16 @@ impl Level
 
 		match self.hover_preview
 		{
+			Some(Preview::HoverObjectives) if self.tutorial.is_some() =>
+			{
+				unsafe { *DRAW_COLORS = 0x31 };
+				rect(20, 20, 120, 120);
+
+				if let Some(tutorial) = self.tutorial
+				{
+					tutorial.draw(25, 25);
+				}
+			}
 			Some(Preview::HoverObjectives) =>
 			{
 				unsafe { *DRAW_COLORS = 0x31 };
@@ -1291,12 +1354,15 @@ impl Level
 					y += 15;
 					decree.draw(x, y);
 				}
-				y = 139;
-				unsafe { *DRAW_COLORS = 0x03 };
-				text("Tribute:", x, y);
-				draw_threat_value(self.tribute, x + 67, y);
-				unsafe { *DRAW_COLORS = 0x3210 };
-				sprites::draw_wine_icon(x + 76, y - 1);
+				if self.tribute > 0
+				{
+					y = 139;
+					unsafe { *DRAW_COLORS = 0x03 };
+					text("Tribute:", x, y);
+					draw_threat_value(self.tribute, x + 67, y);
+					unsafe { *DRAW_COLORS = 0x3210 };
+					sprites::draw_wine_icon(x + 76, y - 1);
+				}
 			}
 			_ => match self.state
 			{
@@ -1324,6 +1390,17 @@ impl Level
 					unsafe { *DRAW_COLORS = 0x3210 };
 					sprites::draw_wreath_icon(x + 70, y - 1);
 					unsafe { *DRAW_COLORS = 0x03 };
+				}
+				State::TributeSkipped =>
+				{
+					unsafe { *DRAW_COLORS = 0x31 };
+					rect(10, 60, 140, 35);
+					unsafe { *DRAW_COLORS = 0x03 };
+					let x = 15;
+					let mut y = 60 + 6;
+					text("A new year", x, y);
+					y += 8;
+					text("begins.", x, y);
 				}
 				State::TributePaid =>
 				{

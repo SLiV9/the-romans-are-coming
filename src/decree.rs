@@ -10,21 +10,21 @@ use crate::level::Marker;
 use crate::level::TerrainType;
 use crate::sprites;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AllOrNone
 {
 	All,
 	None,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InOrNear
 {
 	In,
 	Near,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decree
 {
 	Regional
@@ -37,24 +37,17 @@ pub enum Decree
 	AllRomansAdjacent,
 	NoWorkersAdjacent,
 	NoRomansInAmbush,
+	Dummy,
 }
 
 impl Decree
 {
 	pub fn draw(&self, x: i32, y: i32) -> i32
 	{
-		let mut dx = 0;
-		for part in self.parts()
-		{
-			dx += part.draw(x + dx, y);
-		}
-		unsafe { *DRAW_COLORS = 0x03 };
-		text(".", x + dx - 4, y);
-		dx += 4;
-		dx
+		draw_parts(&self.parts(), x, y)
 	}
 
-	fn parts(&self) -> [Part; 4]
+	fn parts(&self) -> [Part; 5]
 	{
 		match self
 		{
@@ -68,34 +61,123 @@ impl Decree
 				marker.into(),
 				in_or_near.into(),
 				terrain_type.into(),
+				Part::Period,
 			],
 			Decree::AllRomansAdjacent => [
 				AllOrNone::All.into(),
 				Marker::Roman.into(),
 				InOrNear::Near.into(),
 				Marker::Roman.into(),
+				Part::Period,
 			],
 			Decree::NoWorkersAdjacent => [
 				AllOrNone::None.into(),
 				Marker::Worker.into(),
 				InOrNear::Near.into(),
 				Marker::Worker.into(),
+				Part::Period,
 			],
 			Decree::NoRomansInAmbush => [
 				AllOrNone::None.into(),
 				Marker::Roman.into(),
 				Part::Word("as"),
 				Marker::DeadRoman.into(),
+				Part::Period,
+			],
+			Decree::Dummy => [
+				Part::Word("Place"),
+				Marker::Worker.into(),
+				Marker::Worker.into(),
+				Marker::Worker.into(),
+				Marker::Worker.into(),
 			],
 		}
 	}
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Tutorial
+{
+	PlaceBanners,
+}
+
+impl Tutorial
+{
+	pub fn draw(&self, x: i32, y: i32)
+	{
+		match self
+		{
+			Tutorial::PlaceBanners =>
+			{
+				let parts = &[
+					Part::Word("Greetings,"),
+					Part::Newline,
+					Part::Word("your highness!"),
+					Part::Newline,
+					Part::Newline,
+					Part::Word("Place"),
+					Marker::Worker.into(),
+					Part::Newline,
+					Part::Word("to score 1"),
+					Icon::Score.into(),
+					Part::Newline,
+					Part::Word("and gather"),
+					Part::Newline,
+					Part::Word("1"),
+					Icon::Grain.into(),
+					Part::Word("/"),
+					Icon::Wood.into(),
+					Part::Word("/"),
+					Icon::Gold.into(),
+					Part::Word("/"),
+					Icon::Wine.into(),
+					Part::Period,
+				];
+				draw_parts(parts, x, y);
+			}
+		}
+	}
+}
+
+fn draw_parts(parts: &[Part], x: i32, y: i32) -> i32
+{
+	let mut dx = 0;
+	let mut dy = 0;
+	for part in parts
+	{
+		dx += part.draw(x + dx, y + dy);
+		match part
+		{
+			Part::Newline =>
+			{
+				dx = 0;
+				dy += 10;
+			}
+			_ => (),
+		}
+	}
+	dx
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Icon
+{
+	Score,
+	Grain,
+	Wood,
+	Wine,
+	Gold,
+}
+
+#[derive(Debug)]
 enum Part
 {
 	Word(&'static str),
 	Marker(Marker),
 	TerrainType(TerrainType),
+	Icon(Icon),
+	Period,
+	Newline,
 }
 
 impl From<AllOrNone> for Part
@@ -138,6 +220,14 @@ impl From<TerrainType> for Part
 	}
 }
 
+impl From<Icon> for Part
+{
+	fn from(x: Icon) -> Part
+	{
+		Part::Icon(x)
+	}
+}
+
 impl<T: Copy + Into<Part>> From<&T> for Part
 {
 	fn from(x: &T) -> Part
@@ -158,6 +248,13 @@ impl Part
 				text(word, x, y);
 				(word.len() as i32) * 8 + 4
 			}
+			Part::Period =>
+			{
+				unsafe { *DRAW_COLORS = 0x03 };
+				text(".", x - 4, y);
+				4
+			}
+			Part::Newline => 0,
 			Part::Marker(marker) =>
 			{
 				let flag = match marker
@@ -223,6 +320,36 @@ impl Part
 				unsafe { *DRAW_COLORS = 0x1320 };
 				sprites::draw_boat(x + 4, y + 4, 0);
 				16
+			}
+			Part::Icon(Icon::Score) =>
+			{
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_score_icon(x - 4, y - 1);
+				8
+			}
+			Part::Icon(Icon::Grain) =>
+			{
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_grain_icon(x - 2, y - 1);
+				8
+			}
+			Part::Icon(Icon::Wood) =>
+			{
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_wood_icon(x - 2, y - 1);
+				8
+			}
+			Part::Icon(Icon::Wine) =>
+			{
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_wine_icon(x - 2, y - 1);
+				8
+			}
+			Part::Icon(Icon::Gold) =>
+			{
+				unsafe { *DRAW_COLORS = 0x3210 };
+				sprites::draw_gold_icon(x - 2, y - 1);
+				8
 			}
 		}
 	}

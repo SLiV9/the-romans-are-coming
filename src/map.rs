@@ -1208,11 +1208,20 @@ impl Map
 							Marker::Worker => 2,
 							Marker::DeadWorker => 3,
 							Marker::Occupied => 0,
+							Marker::FogOfWar => 100,
 						};
 						let x = MAP_X + cell.centroid_x as i32;
 						let y = MAP_Y + cell.centroid_y as i32;
-						unsafe { *DRAW_COLORS = 0x3210 };
-						sprites::draw_flag(x, y, flag);
+						if flag >= 100
+						{
+							unsafe { *DRAW_COLORS = 0x11 };
+							rect(x - 1, y, 3, 3);
+						}
+						else
+						{
+							unsafe { *DRAW_COLORS = 0x3210 };
+							sprites::draw_flag(x, y, flag);
+						}
 						unsafe { *DRAW_COLORS = 0x2310 };
 						if is_killed
 						{
@@ -1239,7 +1248,6 @@ impl Map
 					{
 						let x = MAP_X + cell.centroid_x as i32;
 						let y = MAP_Y + cell.centroid_y as i32;
-						unsafe { *DRAW_COLORS = 0x4310 };
 						if kill_preview.get(region_id as usize)
 						{
 							unsafe { *DRAW_COLORS = 0x2310 };
@@ -1247,12 +1255,14 @@ impl Map
 						}
 						else if attack_preview.get(region_id as usize)
 						{
+							unsafe { *DRAW_COLORS = 0x4310 };
 							sprites::draw_hovered_town(x, y);
 							unsafe { *DRAW_COLORS = 0x2310 };
 							sprites::draw_attacking_town(x + 6, y);
 						}
 						else
 						{
+							unsafe { *DRAW_COLORS = 0x4310 };
 							sprites::draw_hovered_town(x, y);
 						}
 					}

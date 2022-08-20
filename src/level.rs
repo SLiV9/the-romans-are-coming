@@ -22,6 +22,7 @@ pub const MAX_NUM_CARDS: usize = 20;
 pub const MAX_NUM_DECREES: usize = 6;
 
 const MAX_THREAT_LEVEL: u8 = 10;
+const MAX_TRIBUTE: u8 = 8;
 
 const VILLAGE_WOOD_COST: u8 = 10;
 const VILLAGE_GOLD_COST: u8 = 5;
@@ -49,6 +50,7 @@ pub enum Marker
 	Roman,
 	DeadRoman,
 	Occupied,
+	FogOfWar,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,7 +175,7 @@ impl Level
 			map.fill_adjacency(&mut adjacency, &mut border_adjacency);
 			let roman_spawn = match seed
 			{
-				1 => Some(30),
+				1 => None,
 				_ => (0..(num_regions as usize))
 					.rev()
 					.filter(|i| border_adjacency.get(*i as usize))
@@ -192,6 +194,22 @@ impl Level
 				let marker = Marker::Occupied;
 				region_data[region_id as usize].marker = Some(marker);
 				map.set_marker_in_region(region_id, Some(marker));
+			}
+			match seed
+			{
+				1 =>
+				{
+					for region_id in [
+						0, 1, 2, 3, 4, 6, 8, 9, 10, 12, 13, 14, 15, 19, 20, 22,
+						23, 24, 25, 26, 27, 29, 30, 31,
+					]
+					{
+						let marker = Marker::FogOfWar;
+						region_data[region_id as usize].marker = Some(marker);
+						map.set_marker_in_region(region_id, Some(marker));
+					}
+				}
+				_ => (),
 			}
 		}
 		let tutorial = match seed
@@ -326,7 +344,27 @@ impl Level
 				{
 					if self.count_remaining_spaces() == 0
 					{
-						self.state = State::Resolution;
+						if self.tutorial == Some(Tutorial::FeedWorkers)
+						{
+							self.tutorial = Some(Tutorial::Harvest);
+							self.state = State::NewObjectives;
+						}
+						else if self.tutorial
+							== Some(Tutorial::RomansHaveCome)
+						{
+							self.tribute = 15;
+							self.tutorial = Some(Tutorial::Tribute);
+							self.state = State::NewObjectives;
+						}
+						else
+						{
+							self.state = State::Resolution;
+						}
+					}
+					else if self.tutorial == Some(Tutorial::PlaceBanners)
+					{
+						self.tutorial = Some(Tutorial::FeedWorkers);
+						self.state = State::NewObjectives;
 					}
 					else
 					{
@@ -336,7 +374,7 @@ impl Level
 				}
 				State::Shuffling =>
 				{
-					if self.ticks_in_4sec == 30
+					if self.ticks_in_4sec == 5
 					{
 						self.shuffle();
 						self.state = State::Placement;
@@ -447,6 +485,8 @@ impl Level
 							|i| match self.region_data[*i].marker
 							{
 								Some(Marker::Occupied) => false,
+								Some(Marker::FogOfWar) => false,
+								Some(Marker::Roman) => true,
 								Some(_) => true,
 								None => false,
 							},
@@ -458,19 +498,39 @@ impl Level
 						}
 						else
 						{
-							if self.tribute == 0
+							if self.tutorial == Some(Tutorial::FirstKill)
+							{
+								self.tutorial = Some(Tutorial::RomansHaveCome);
+								let marker = Marker::Roman;
+								self.region_data[27].marker = Some(marker);
+								map.set_marker_in_region(27, Some(marker));
+								self.state = State::Occupation;
+							}
+							else if self.tribute == 0
 							{
 								self.state = State::TributeSkipped;
 							}
 							else if self.wine >= self.tribute
 							{
 								self.wine -= self.tribute;
-								self.tribute += 3;
+								self.tribute += 2;
+								if self.tribute > MAX_TRIBUTE
+								{
+									self.tribute = MAX_TRIBUTE;
+								}
 								self.state = State::TributePaid;
 							}
 							else
 							{
 								self.tribute += 1;
+								if self.tutorial == Some(Tutorial::Tribute)
+								{
+									self.tribute = 1;
+								}
+								if self.tribute > MAX_TRIBUTE
+								{
+									self.tribute = MAX_TRIBUTE;
+								}
 								if self.threat_level < MAX_THREAT_LEVEL
 								{
 									self.threat_level += 1;
@@ -514,8 +574,20 @@ impl Level
 				{
 					if self.ticks_in_4sec >= 90
 					{
+						if self.tutorial == Some(Tutorial::Harvest)
+						{
+							let marker = Marker::Roman;
+							self.region_data[22].marker = Some(marker);
+							map.set_marker_in_region(22, Some(marker));
+						}
+
 						self.state = State::Shuffling;
 						self.ticks_in_4sec = 0;
+
+						if self.tutorial == Some(Tutorial::RomansHaveCome)
+						{
+							self.state = State::NewObjectives;
+						}
 					}
 				}
 				State::TributeFailed =>
@@ -623,6 +695,20 @@ impl Level
 				State::Placement =>
 				{
 					self.place_marker(map);
+
+					if self.tutorial == Some(Tutorial::Harvest)
+					{
+						if self.region_data[0..(self.num_regions as usize)]
+							.iter()
+							.any(|region| {
+								region.marker == Some(Marker::DeadRoman)
+							})
+						{
+							self.tutorial = Some(Tutorial::FirstKill);
+							self.state = State::NewObjectives;
+							self.num_cards = 0;
+						}
+					}
 				}
 				State::NewDecrees =>
 				{
@@ -639,6 +725,10 @@ impl Level
 				}
 				State::TributeFailed =>
 				{
+					if self.tutorial == Some(Tutorial::Tribute)
+					{
+						self.num_decrees = 0;
+					}
 					self.state = State::Shuffling;
 					self.ticks_in_4sec = 0;
 				}
@@ -705,6 +795,7 @@ impl Level
 				}
 				(Some(Marker::DeadRoman), _) => (),
 				(Some(Marker::DeadWorker), _) => (),
+				(Some(Marker::FogOfWar), _) => (),
 				(None, _) => (),
 			}
 		}
@@ -814,26 +905,28 @@ impl Level
 	fn pick_decrees(&mut self)
 	{
 		self.num_decrees = 0;
-		match self.tutorial
+		if self.threat_level == 0
 		{
-			Some(Tutorial::PlaceBanners) =>
+			if self.tutorial.is_some()
 			{
 				self.decree_data[self.num_decrees as usize] = Decree::Dummy;
 				self.num_decrees += 1;
-				return;
 			}
-			_ => (),
-		}
-		if self.threat_level == 0
-		{
-			let decree = Decree::NoWorkersAdjacent;
-			self.decree_data[self.num_decrees as usize] = decree;
-			self.num_decrees += 1;
+			else
+			{
+				let decree = Decree::NoWorkersAdjacent;
+				self.decree_data[self.num_decrees as usize] = decree;
+				self.num_decrees += 1;
+			}
 			return;
 		}
 		self.decree_data[self.num_decrees as usize] = Decree::AllRomansAdjacent;
 		self.num_decrees += 1;
-		let difficulty_level = 1;
+		let difficulty_level = match self.tutorial
+		{
+			Some(_) => 0,
+			_ => 1,
+		};
 		for _i in 0..difficulty_level
 		{
 			let decree = Decree::Regional {
@@ -940,6 +1033,7 @@ impl Level
 			}
 			_ => return,
 		};
+		trace(format!("clicked region {}", region_id));
 		self.region_data[region_id as usize].marker = Some(marker);
 		map.set_marker_in_region(region_id, Some(marker));
 		for i in self.kill_preview.into_iter()
@@ -1249,7 +1343,7 @@ impl Level
 			Some(Preview::HoverObjectives) if self.tutorial.is_some() =>
 			{
 				unsafe { *DRAW_COLORS = 0x31 };
-				rect(20, 20, 120, 120);
+				rect(20, 20, 120, 130);
 
 				if let Some(tutorial) = self.tutorial
 				{

@@ -95,10 +95,15 @@ impl Decree
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tutorial
 {
 	PlaceBanners,
+	FeedWorkers,
+	Harvest,
+	FirstKill,
+	RomansHaveCome,
+	Tribute,
 }
 
 impl Tutorial
@@ -117,6 +122,8 @@ impl Tutorial
 					Part::Newline,
 					Part::Word("Place"),
 					Marker::Worker.into(),
+					Part::Word("on"),
+					Icon::Town.into(),
 					Part::Newline,
 					Part::Word("to score 1"),
 					Icon::Score.into(),
@@ -131,6 +138,161 @@ impl Tutorial
 					Icon::Gold.into(),
 					Part::Word("/"),
 					Icon::Wine.into(),
+					Part::Period,
+					Part::Newline,
+					Part::Newline,
+					Part::Word("After 4"),
+					Marker::Worker.into(),
+					Part::Newline,
+					Part::Word("a new day"),
+					Part::Newline,
+					Part::Word("begins."),
+				];
+				draw_parts(parts, x, y);
+			}
+			Tutorial::FeedWorkers =>
+			{
+				let parts = &[
+					Part::Word("Each"),
+					Marker::Worker.into(),
+					Part::Word("consumes"),
+					Part::Newline,
+					Part::Word("1"),
+					Icon::Grain.into(),
+					Part::Word(" (or 1"),
+					Icon::Wine.into(),
+					Part::Word(")"),
+					Part::Newline,
+					Part::Word("per day."),
+					Part::Newline,
+					Part::Newline,
+					Part::Word("Keep placing"),
+					Marker::Worker.into(),
+					Part::Newline,
+					Part::Word("until the map"),
+					Part::Newline,
+					Part::Word("is full."),
+					Part::Newline,
+					Part::Newline,
+					Part::Word("(Hover the"),
+					Part::Newline,
+					Part::Word("resource bar"),
+					Part::Newline,
+					Part::Word("for hints.)"),
+				];
+				draw_parts(parts, x, y);
+			}
+			Tutorial::Harvest =>
+			{
+				let parts = &[
+					Part::Word("Wonderful!"),
+					Part::Newline,
+					Part::Newline,
+					Part::Word("During harvest"),
+					Part::Newline,
+					Part::Word("each"),
+					Marker::Worker.into(),
+					Part::Word("gathers"),
+					Part::Newline,
+					Part::Word("an additional"),
+					Part::Newline,
+					Part::Word("1"),
+					Icon::Grain.into(),
+					Part::Word("/"),
+					Icon::Wood.into(),
+					Part::Word("/"),
+					Icon::Gold.into(),
+					Part::Word("/"),
+					Icon::Wine.into(),
+					Part::Period,
+				];
+				draw_parts(parts, x, y);
+			}
+			Tutorial::FirstKill =>
+			{
+				let parts = &[
+					Part::Word("Ah!"),
+					Part::Newline,
+					Part::Newline,
+					Part::Word("Your grace,"),
+					Part::Newline,
+					Part::Word("one of your"),
+					Marker::Worker.into(),
+					Part::Newline,
+					Part::Word("seems to have"),
+					Part::Newline,
+					Part::Word("fought and"),
+					Part::Newline,
+					Part::Word("killed a"),
+					Marker::Roman.into(),
+					Part::Period,
+					Part::Newline,
+					Part::Newline,
+					Part::Word("Let us pray"),
+					Part::Newline,
+					Part::Word("the Romans"),
+					Part::Newline,
+					Part::Word("forgive you..."),
+				];
+				draw_parts(parts, x, y);
+			}
+			Tutorial::RomansHaveCome =>
+			{
+				let parts = &[
+					Part::Word("The Romans"),
+					Part::Newline,
+					Part::Word("have come!"),
+					Part::Newline,
+					Part::Newline,
+					Part::Word("Your highness,"),
+					Part::Newline,
+					Part::Word("a"),
+					Marker::Roman.into(),
+					Part::Word("has seized"),
+					Part::Newline,
+					Part::Word("control of the"),
+					Part::Newline,
+					Part::Word("beach."),
+					Part::Newline,
+					Part::Word("Our"),
+					Marker::Worker.into(),
+					Part::Word("cannot"),
+					Part::Newline,
+					Part::Word("defeat"),
+					Marker::Roman.into(),
+					Part::Word("in"),
+					Part::Newline,
+					Part::Word("a region in"),
+					Part::Newline,
+					Part::Word("Roman hands."),
+				];
+				draw_parts(parts, x, y);
+			}
+			Tutorial::Tribute =>
+			{
+				let parts = &[
+					Part::Word("The Romans"),
+					Part::Newline,
+					Part::Word("demand that"),
+					Part::Newline,
+					Part::Word("a tribute of"),
+					Part::Newline,
+					Part::Word("15"),
+					Icon::Wine.into(),
+					Part::Word("is paid."),
+					Part::Newline,
+					Part::Newline,
+					Part::Word("If we do not"),
+					Part::Newline,
+					Part::Word("obey their"),
+					Part::Newline,
+					Part::Word("decrees, the"),
+					Part::Newline,
+					Part::Word("Roman Emperor"),
+					Part::Newline,
+					Part::Word("will send more"),
+					Part::Newline,
+					Marker::Roman.into(),
 					Part::Period,
 				];
 				draw_parts(parts, x, y);
@@ -151,7 +313,7 @@ fn draw_parts(parts: &[Part], x: i32, y: i32) -> i32
 			Part::Newline =>
 			{
 				dx = 0;
-				dy += 10;
+				dy += 11;
 			}
 			_ => (),
 		}
@@ -167,6 +329,7 @@ enum Icon
 	Wood,
 	Wine,
 	Gold,
+	Town,
 }
 
 #[derive(Debug)]
@@ -264,6 +427,7 @@ impl Part
 					Marker::Worker => 2,
 					Marker::DeadWorker => 3,
 					Marker::Occupied => 0,
+					Marker::FogOfWar => 3,
 				};
 				unsafe { *DRAW_COLORS = 0x3210 };
 				sprites::draw_flag(x + 2, y + 8, flag);
@@ -350,6 +514,12 @@ impl Part
 				unsafe { *DRAW_COLORS = 0x3210 };
 				sprites::draw_gold_icon(x - 2, y - 1);
 				8
+			}
+			Part::Icon(Icon::Town) =>
+			{
+				unsafe { *DRAW_COLORS = 0x2310 };
+				sprites::draw_hovered_town(x + 2, y + 2);
+				16
 			}
 		}
 	}

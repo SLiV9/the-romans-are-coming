@@ -167,11 +167,20 @@ impl Level
 				num_regions += 1;
 			}
 			map.fill_adjacency(&mut adjacency, &mut border_adjacency);
-			let cutoff = rng.usize(0..(num_regions as usize));
-			let roman_spawn = (0..(num_regions as usize))
-				.filter(|i| border_adjacency.get(*i as usize))
-				.find(|i| *i >= cutoff)
-				.map(|i| i as i8);
+			let roman_spawn = match seed
+			{
+				1 => Some(30),
+				_ => (0..(num_regions as usize))
+					.rev()
+					.filter(|i| border_adjacency.get(*i as usize))
+					.find(|i| match region_data[*i].terrain_type
+					{
+						TerrainType::Water => false,
+						TerrainType::Mountain => false,
+						_ => true,
+					})
+					.map(|i| i as i8),
+			};
 			if let Some(region_id) = roman_spawn
 			{
 				map.occupy_region(region_id);

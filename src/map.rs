@@ -24,6 +24,7 @@ pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
 pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
 
 const MIN_NUM_REGIONS: usize = 25;
+const MIN_NUM_SURFACES_PER_REGION: usize = 20;
 const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
 const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
 const DBR_BBOX_RADIUS: i32 = 4;
@@ -481,7 +482,7 @@ impl Map
 			}
 			else if any
 			{
-				trace(format!("gobbling up headless {}", prelim_id));
+				trace("gobbling up headless");
 			}
 		}
 		// Adjust region clearing positions.
@@ -1652,9 +1653,13 @@ impl Map
 	fn calculate_cell_badness(&self, r: usize, c: usize) -> i8
 	{
 		let cell = &self.cells[r][c];
-		let terrain_type = match cell.contents
+		let (prelim_id, terrain_type) = match cell.contents
 		{
-			Contents::Unmerged { terrain_type, .. } => terrain_type,
+			Contents::Unmerged {
+				preliminary_region_id,
+				terrain_type,
+				..
+			} => (preliminary_region_id, terrain_type),
 			_ =>
 			{
 				return 0;
@@ -1713,15 +1718,28 @@ impl Map
 				}
 			}
 		}
-		let mut badness: i8 = 10;
+		let mut num_surfaces: usize = 0;
+		for v in 0..PROP_GRID_SIZE
+		{
+			for u in 0..PROP_GRID_SIZE
+			{
+				if self.prop_region_vu_map[v][u] == prelim_id
+				{
+					num_surfaces += 1;
+				}
+			}
+		}
+		let mut badness: i32 = 10;
 		if r == 0 || c == 0 || r == GRID_SIZE - 1 || c == GRID_SIZE - 1
 		{
 			badness += 25;
 		}
-		badness -= std::cmp::min(num_close_different, 4) as i8;
-		badness += std::cmp::min(num_close_similar, 4) as i8;
-		badness += 10 * (std::cmp::min(num_too_close, 8) as i8);
-		badness
+		badness += MIN_NUM_SURFACES_PER_REGION as i32
+			- std::cmp::min(num_surfaces, MIN_NUM_SURFACES_PER_REGION) as i32;
+		badness -= std::cmp::min(num_close_different, 4) as i32;
+		badness += std::cmp::min(num_close_similar, 4) as i32;
+		badness += 10 * (std::cmp::min(num_too_close, 8) as i32);
+		badness.clamp(-125, 125) as i8
 	}
 }
 

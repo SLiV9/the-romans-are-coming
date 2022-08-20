@@ -876,20 +876,26 @@ impl Map
 				match &mut self.cells[r][c].contents
 				{
 					Contents::Region {
-						region_id: r,
+						region_id: rid,
 						occupation_percentage,
 						..
-					} if *r == region_id =>
+					} if *rid == region_id =>
 					{
-						*occupation_percentage = 1;
+						if *occupation_percentage == 0
+						{
+							*occupation_percentage = 1;
+						}
 					}
 					Contents::Subregion {
-						parent_region_id: r,
+						parent_region_id: rid,
 						occupation_percentage,
 						..
-					} if *r == region_id =>
+					} if *rid == region_id =>
 					{
-						*occupation_percentage = 1;
+						if *occupation_percentage == 0
+						{
+							*occupation_percentage = 1;
+						}
 					}
 					_ => (),
 				}

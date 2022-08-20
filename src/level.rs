@@ -732,6 +732,19 @@ impl Level
 					self.state = State::Shuffling;
 					self.ticks_in_4sec = 0;
 				}
+				State::GameOver =>
+				{
+					if self.tutorial.is_some()
+					{
+						return Some(Transition { rng_seed: 3 });
+					}
+					else
+					{
+						return Some(Transition {
+							rng_seed: self.ticks_in_4sec as u64,
+						});
+					}
+				}
 				_ => (),
 			}
 		}
@@ -922,21 +935,34 @@ impl Level
 		}
 		self.decree_data[self.num_decrees as usize] = Decree::AllRomansAdjacent;
 		self.num_decrees += 1;
-		let difficulty_level = match self.tutorial
+		if self.tutorial.is_some()
 		{
-			Some(_) => 0,
-			_ => 1,
-		};
-		for _i in 0..difficulty_level
+			if self.threat_level >= 4
+			{
+				let decree = Decree::Regional {
+					all_or_none: AllOrNone::All,
+					marker: Marker::Roman,
+					in_or_near: InOrNear::In,
+					terrain_type: TerrainType::Grass,
+				};
+				self.decree_data[self.num_decrees as usize] = decree;
+				self.num_decrees += 1;
+			}
+			if self.threat_level >= 9
+			{
+				let decree = Decree::Regional {
+					all_or_none: AllOrNone::All,
+					marker: Marker::Roman,
+					in_or_near: InOrNear::Near,
+					terrain_type: TerrainType::Forest,
+				};
+				self.decree_data[self.num_decrees as usize] = decree;
+				self.num_decrees += 1;
+			}
+		}
+		else
 		{
-			let decree = Decree::Regional {
-				all_or_none: AllOrNone::None,
-				marker: Marker::Roman,
-				in_or_near: InOrNear::Near,
-				terrain_type: TerrainType::Water,
-			};
-			self.decree_data[self.num_decrees as usize] = decree;
-			self.num_decrees += 1;
+			// TODO
 		}
 		self.decree_data[self.num_decrees as usize] = Decree::NoRomansInAmbush;
 		self.num_decrees += 1;
@@ -1533,6 +1559,17 @@ impl Level
 					draw_threat_value(self.tribute, x + 114, y);
 					unsafe { *DRAW_COLORS = 0x3210 };
 					sprites::draw_wine_icon(x + 123, y - 1);
+				}
+				State::GameOver =>
+				{
+					unsafe { *DRAW_COLORS = 0x31 };
+					rect(10, 60, 140, 35);
+					unsafe { *DRAW_COLORS = 0x03 };
+					let x = 15;
+					let mut y = 60 + 6;
+					text("You have been", x, y);
+					y += 8;
+					text("eradicated.", x, y);
 				}
 				_ => (),
 			},

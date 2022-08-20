@@ -73,6 +73,7 @@ const EMPTY_REGION: Region = Region {
 enum State
 {
 	Setup,
+	NewObjectives,
 	NewDecrees,
 	Placement,
 	Shuffling,
@@ -259,6 +260,11 @@ impl Level
 			match self.state
 			{
 				State::Setup =>
+				{
+					self.state = State::Shuffling;
+					self.ticks_in_4sec = 0;
+				}
+				State::NewObjectives =>
 				{
 					// Wait for user to finish reading.
 					self.hover_preview = Some(Preview::HoverObjectives);
@@ -549,7 +555,7 @@ impl Level
 		{
 			match self.state
 			{
-				State::Setup =>
+				State::NewObjectives =>
 				{
 					self.num_decrees = 0;
 					self.state = State::Shuffling;

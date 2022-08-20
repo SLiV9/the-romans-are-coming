@@ -6,12 +6,14 @@
 
 use crate::wasm4::*;
 
+use crate::music::Music;
 use crate::palette;
 use crate::wreath;
 
 pub struct Menu
 {
 	ticks: u32,
+	music: Music,
 }
 
 const NUM_INTRO_ANIMATION_TICKS: u32 = 90;
@@ -20,7 +22,10 @@ impl Menu
 {
 	pub fn new() -> Self
 	{
-		Self { ticks: 0 }
+		Self {
+			ticks: 0,
+			music: Music::main_theme(),
+		}
 	}
 
 	pub fn update(&mut self) -> Option<Transition>
@@ -29,6 +34,8 @@ impl Menu
 		let mousebuttons = unsafe { *MOUSE_BUTTONS };
 
 		self.ticks += 1;
+
+		self.music.update();
 
 		if gamepad & BUTTON_1 != 0
 		{

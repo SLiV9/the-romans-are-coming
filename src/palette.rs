@@ -23,6 +23,8 @@ pub const ALT_BROWN: u32 = 0xbc9171;
 pub const ALT_BLACK: u32 = 0x25272a;
 pub const ALT_RED: u32 = 0xba543d;
 
+pub const MENU_BLACK: u32 = 0x343b34;
+
 pub const DEFAULT: [u32; 4] = [PAPER, BROWN, BLACK, PAPER];
 pub const SNOW: [u32; 4] = [PAPER, BROWN, BLACK, WHITE];
 pub const BLOOD: [u32; 4] = [PAPER, BROWN, BLACK, RED];
@@ -31,6 +33,7 @@ pub const NATURE: [u32; 4] = [PAPER, BROWN, BLACK, GREEN];
 pub const WINE: [u32; 4] = [PAPER, BROWN, BLACK, PURPLE];
 pub const WATER: [u32; 4] = [PAPER, BROWN, BLACK, BLUE];
 pub const ROMAN: [u32; 4] = [ALT_PAPER, ALT_BROWN, ALT_BLACK, ALT_RED];
+pub const MENU: [u32; 4] = [BLACK, MENU_BLACK, BROWN, PAPER];
 
 pub fn setup()
 {

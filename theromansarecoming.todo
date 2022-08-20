@@ -51,7 +51,7 @@ Sprites:
     ✔ Boats @done (2022-08-15 18:42)
     ✔ Houses / city gates @done (2022-08-19 21:16)
     ✔ Battlefields/graves @done (2022-08-18 12:45)
-      ☐ Dustclouds when fighting occurs
+      ✘ Dustclouds when fighting occurs @cancelled (2022-08-20 10:12)
   ✔ Resource icons @done (2022-08-18 13:44)
     ✔ Grain @done (2022-08-18 13:44)
     ✔ Wood @done (2022-08-18 13:44)
@@ -59,23 +59,23 @@ Sprites:
     ✔ Metal @done (2022-08-18 13:44)
     ✔ Points @done (2022-08-18 13:44)
     ✔ Laurels @done (2022-08-18 13:44)
-  ☐ Map of roman empire
-  ☐ Roman wreath on title screen?
+  ✘ Map of roman empire @cancelled (2022-08-20 10:12)
+  ✔ Roman wreath on title screen? @done (2022-08-20 10:56)
 
 Audio:
   ☐ Resource gathering
-  ☐ Papers moving around
+  ✘ Papers moving around @cancelled (2022-08-20 10:13)
   ☐ Combat?
   ☐ Light background music
 
 Usability:
   ☐ Keyboard controls
   ☐ Volume options 0/50%/100%
-  ☐ High contrast mode (in particular the two shades of paper)
+  ✘ High contrast mode (in particular the two shades of paper) @cancelled (2022-08-20 10:13)
     ✘ Adjustable palette? @cancelled (2022-08-18 17:54)
 
 Polish:
   ☐ Itch.io page
     ☐ Preview image with a single worker surrounded by roman occupation
-    ☐ Credits
+    ✔ Credits @done (2022-08-20 10:58)
   ☐ Publish to WAPM

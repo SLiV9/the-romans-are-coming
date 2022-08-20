@@ -16,6 +16,7 @@ mod map;
 mod menu;
 mod palette;
 mod sprites;
+mod wreath;
 
 use global_state::Wrapper;
 use level::Level;
@@ -23,7 +24,7 @@ use menu::Menu;
 
 static GAME: Wrapper<Game> = Wrapper::new(Game::Loading);
 
-const QUICK_TEST: bool = true;
+const QUICK_TEST: bool = false;
 
 enum Game
 {

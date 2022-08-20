@@ -18,6 +18,14 @@ w4 run target/wasm32-unknown-unknown/release/cart.wasm
 
 For more info about setting up WASM-4, see the [quickstart guide](https://wasm4.org/docs/getting-started/setup?code-lang=rust#quickstart).
 
+## Credits
+
+A game by Sander in 't Veld.
+
+Wreath pixel art on menu screen by [scribbles pixels](https://scrixels.tumblr.com/).
+
+Color palette based on [Painted Parchment 9 by skeddles](https://lospec.com/palette-list/painted-parchment-9).
+
 ## License
 
 This game was made by Sander in 't Veld. Its source code is made available to you under the MIT License, as specified in *LICENSE.txt*.

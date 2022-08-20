@@ -7,13 +7,14 @@
 use crate::wasm4::*;
 
 use crate::palette;
+use crate::wreath;
 
 pub struct Menu
 {
 	ticks: u32,
 }
 
-const NUM_INTRO_ANIMATION_TICKS: u32 = 160;
+const NUM_INTRO_ANIMATION_TICKS: u32 = 90;
 
 impl Menu
 {
@@ -49,32 +50,65 @@ impl Menu
 
 	pub fn draw(&mut self)
 	{
-		unsafe { *PALETTE = palette::DEFAULT };
-
-		unsafe { *DRAW_COLORS = 3 };
+		if self.ticks >= NUM_INTRO_ANIMATION_TICKS
 		{
-			if self.ticks > 60
+			unsafe { *PALETTE = palette::MENU };
+		}
+		else if self.ticks < 30
+		{
+			unsafe { *PALETTE = palette::MENU };
+			return;
+		}
+		else if self.ticks % 15 == 0
+		{
+			let t = self.ticks - 30;
+			let maxt = NUM_INTRO_ANIMATION_TICKS - 30;
+			let mut work_palette = [0u32; 4];
+			for i in 0..4
 			{
-				text("THE", 60, 20);
+				work_palette[i] = 0x000000;
+				let black = palette::BLACK;
+				let target = palette::MENU[i];
+				for d in 0..3
+				{
+					let from: u32 = (black >> (8 * d)) & 0xFF;
+					let to: u32 = (target >> (8 * d)) & 0xFF;
+					let x = from + t * (to - from) / maxt;
+					work_palette[i] |= (x & 0xFF) << (8 * d);
+				}
 			}
-			if self.ticks > 80
-			{
-				text("ROMANS", 60 + 8, 30);
-			}
-			if self.ticks > 100
-			{
-				text("ARE", 60 + 16, 40);
-			}
-			if self.ticks > 120
-			{
-				text("COMING!", 60 + 24, 50);
-			}
+			unsafe { *PALETTE = work_palette };
+		}
+
+		unsafe { *DRAW_COLORS = 0x2340 };
+		wreath::draw_laurel_wreath(80, 80);
+
+		unsafe { *DRAW_COLORS = 2 };
+		{
+			text("THE", 16 + 1, 16 + 1);
+			text("ROMANS", 16 + 32 + 1, 16 + 1);
+			text("ARE", 64 - 8 + 1, 26 + 1);
+			text("COMING!", 64 + 24 + 1, 26 + 1);
+		}
+		unsafe { *DRAW_COLORS = 4 };
+		{
+			text("THE", 16, 16);
+			text("ROMANS", 16 + 32, 16);
+			text("ARE", 64 - 8, 26);
+			text("COMING!", 64 + 24, 26);
 		}
 
 		if self.ticks > NUM_INTRO_ANIMATION_TICKS + 30
 		{
+			unsafe { *DRAW_COLORS = 3 }
+			text("Start", 64, 130);
+			//text("Options", 56, 140);
+		}
+
+		if unsafe { *GAMEPAD1 } & BUTTON_2 != 0
+		{
 			unsafe { *DRAW_COLORS = 2 }
-			text("Click to begin", 3, 150);
+			text("v1.0", 126, 150);
 		}
 	}
 }

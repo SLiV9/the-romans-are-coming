@@ -7,11 +7,13 @@
 use crate::wasm4::*;
 
 use crate::palette;
+use crate::sprites;
 use crate::wreath;
 
 pub struct Menu
 {
 	ticks: u32,
+	loading_transition: Option<Transition>,
 }
 
 const NUM_INTRO_ANIMATION_TICKS: u32 = 90;
@@ -20,17 +22,25 @@ impl Menu
 {
 	pub fn new() -> Self
 	{
-		Self { ticks: 0 }
+		Self {
+			ticks: 0,
+			loading_transition: None,
+		}
 	}
 
 	pub fn update(&mut self) -> Option<Transition>
 	{
+		if self.loading_transition.is_some()
+		{
+			return self.loading_transition;
+		}
+
 		let gamepad = unsafe { *GAMEPAD1 };
 		let mousebuttons = unsafe { *MOUSE_BUTTONS };
 
 		self.ticks += 1;
 
-		if gamepad & BUTTON_1 != 0
+		self.loading_transition = if gamepad & BUTTON_1 != 0
 		{
 			Some(Transition::Start {
 				rng_seed: self.ticks as u64,
@@ -45,11 +55,25 @@ impl Menu
 		else
 		{
 			None
-		}
+		};
+
+		None
 	}
 
 	pub fn draw(&mut self)
 	{
+		if self.loading_transition.is_some()
+		{
+			unsafe { *PALETTE = palette::DEFAULT };
+			let x = 80 - 4;
+			let y = 80;
+			unsafe { *DRAW_COLORS = 0x1320 };
+			sprites::draw_tree(x, y + 6, 0);
+			sprites::draw_tree(x + 4, y + 7, 0);
+			sprites::draw_tree(x + 8, y + 6, 0);
+			return;
+		}
+
 		if self.ticks >= NUM_INTRO_ANIMATION_TICKS
 		{
 			unsafe { *PALETTE = palette::MENU };
@@ -113,6 +137,7 @@ impl Menu
 	}
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Transition
 {
 	Start

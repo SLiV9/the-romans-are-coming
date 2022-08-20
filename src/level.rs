@@ -231,6 +231,13 @@ impl Level
 			None
 		};
 
+		if unsafe { *GAMEPAD1 } & BUTTON_2 != 0
+		{
+			self.threat_level = MAX_THREAT_LEVEL;
+			self.num_decrees = 0;
+			self.num_cards = 0;
+		}
+
 		self.hover_preview = None;
 		self.kill_preview = Bitmap::new();
 		self.attack_preview = Bitmap::new();

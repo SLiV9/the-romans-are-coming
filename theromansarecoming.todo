@@ -33,15 +33,21 @@ Content:
     ✔ Cull regions without props @done (2022-08-20 17:10)
     ✔ Cull tiny regions @done (2022-08-20 17:10)
     ✔ Make regions more convex / make adjacency more intuitive @done (2022-08-20 15:28)
+    ☐ Move region centroids to center if huge but to edge if small, but on surface either way
+      Keeping in mind the MIN_DISTANCE_BETWEEN_REGIONS
   ✘ Mini-objectives @cancelled (2022-08-19 21:54)
   ✔ Imperial decrees @done (2022-08-19 21:16)
     ✘ Detect when placement is impossible @cancelled (2022-08-19 15:46)
     ☐ Each level has its own hardcoded decrees in sequence
   ☐ Tutorial / difficulty curve
   ✔ Transition occupation smoothly (replace is_occupied with percentage) @done (2022-08-19 13:18)
-  ☐ Adjust starting wood and stone based on availability
-  ☐ Adjust wine tribute based on availability
   ☐ Or curate a selection of level seeds
+    ☐ Debug display with adjacency graph and types
+    ☐ In particular have a "campaign" of curated maps
+  ☐ Freeplay
+    ☐ Adjust starting wood and stone based on availability
+    ☐ Adjust wine tribute based on availability
+    ☐ Detect and solve issues with culled regions forming borders
 
 Sprites:
   ✔ Terrain features @done (2022-08-19 21:52)

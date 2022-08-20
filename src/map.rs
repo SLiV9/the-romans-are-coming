@@ -24,7 +24,7 @@ pub const PROP_GRID_CELL_SIZE: usize = MAP_SIZE / PROP_GRID_SIZE;
 pub const PROPMAP_SIZE: usize = PROP_GRID_SIZE * PROP_GRID_SIZE / 2;
 
 const MIN_NUM_REGIONS: usize = 25;
-const MIN_NUM_SURFACES_PER_REGION: usize = 20;
+const MIN_NUM_SURFACES_PER_REGION: usize = 10;
 const MIN_DISTANCE_BETWEEN_REGIONS: i32 = 20;
 const MAX_DISTANCE_BETWEEN_REGIONS: i32 = 30;
 const DBR_BBOX_RADIUS: i32 = 4;
@@ -1278,6 +1278,29 @@ impl Map
 			Contents::Subregion {
 				parent_region_id, ..
 			} => Some(parent_region_id),
+			Contents::Culled { .. } =>
+			{
+				let u = x / (PROP_GRID_CELL_SIZE as i32);
+				let v = y / (PROP_GRID_CELL_SIZE as i32);
+				if u >= 0
+					&& v >= 0 && u < (PROP_GRID_SIZE as i32)
+					&& v < (PROP_GRID_SIZE as i32)
+				{
+					let id = self.prop_region_vu_map[v as usize][u as usize];
+					if id >= 0
+					{
+						Some(id)
+					}
+					else
+					{
+						None
+					}
+				}
+				else
+				{
+					None
+				}
+			}
 			_ => None,
 		}
 	}

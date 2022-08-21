@@ -148,7 +148,6 @@ pub struct Level
 	state: State,
 	tutorial: Option<Tutorial>,
 	hover_preview: Option<Preview>,
-	cursor: Cursor,
 	rng: fastrand::Rng,
 }
 
@@ -400,12 +399,6 @@ impl Level
 			hover_preview: None,
 			state: State::Setup,
 			tutorial,
-			cursor: Cursor {
-				row: 8,
-				col: 8,
-				mouse_x: -1,
-				mouse_y: -1,
-			},
 			rng,
 		}
 	}
@@ -438,43 +431,7 @@ impl Level
 		self.attack_preview = Bitmap::new();
 		self.support_preview = Bitmap::new();
 		self.gather_preview = Bitmap::new();
-		let hovered_region_id = {
-			let (mouse_x, mouse_y): (i16, i16) =
-				unsafe { (*MOUSE_X, *MOUSE_Y) };
-			let mouse_x = mouse_x as i32;
-			let mouse_y = mouse_y as i32;
-			if mouse_x == self.cursor.mouse_x && mouse_y == self.cursor.mouse_y
-			{
-			}
-			else
-			{
-				self.cursor.mouse_x = mouse_x;
-				self.cursor.mouse_y = mouse_y;
-			}
-			let arrow_mask =
-				BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT;
-			if (gamepad & arrow_mask != 0)
-				&& (self.previous_gamepad & arrow_mask == 0)
-			{
-				let (dc, dr) = if gamepad & BUTTON_UP != 0
-				{
-					(0, -1)
-				}
-				else if gamepad & BUTTON_DOWN != 0
-				{
-					(0, 1)
-				}
-				else if gamepad & BUTTON_LEFT != 0
-				{
-					(-1, 0)
-				}
-				else
-				{
-					(1, 0)
-				};
-			}
-			map.determine_hovered_region_id(&self.cursor)
-		};
+		let hovered_region_id = map.determine_hovered_region_id();
 		if self.num_decrees == 0
 		{
 			self.num_cards = 0;
@@ -1820,12 +1777,4 @@ fn draw_decimal_value<const N: usize>(value: u16, x: i32, y: i32)
 	}
 	let txt = unsafe { std::str::from_utf8_unchecked(&buffer) };
 	text(txt, x, y);
-}
-
-struct Cursor
-{
-	row: u8,
-	col: u8,
-	mouse_x: i16,
-	mouse_y: i16,
 }

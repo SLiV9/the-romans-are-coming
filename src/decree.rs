@@ -294,7 +294,9 @@ impl Tutorial
 			Tutorial::PlaceRomans | Tutorial::PlaceRomans2 =>
 			{
 				let parts = &[
-					Part::Word("We must now"),
+					Part::Word("Each day, we"),
+					Part::Newline,
+					Part::Word("must now also"),
 					Part::Newline,
 					Part::Word("place"),
 					Marker::Roman.into(),

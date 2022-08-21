@@ -104,6 +104,8 @@ pub enum Tutorial
 	FirstKill,
 	RomansHaveCome,
 	Tribute,
+	PlaceRomans,
+	PlaceRomans2,
 	Village,
 }
 
@@ -283,11 +285,30 @@ impl Tutorial
 					Part::Word("is paid."),
 					Part::Newline,
 					Part::Newline,
+					Part::Word("What they ask"),
+					Part::Newline,
+					Part::Word("is impossible!"),
+				];
+				draw_parts(parts, x, y);
+			}
+			Tutorial::PlaceRomans | Tutorial::PlaceRomans2 =>
+			{
+				let parts = &[
+					Part::Word("We must now"),
+					Part::Newline,
+					Part::Word("place"),
+					Marker::Roman.into(),
+					Part::Word("on"),
+					Icon::Town.into(),
+					Part::Newline,
+					Part::Word("according to"),
+					Part::Newline,
+					Part::Word("their decrees."),
+					Part::Newline,
+					Part::Newline,
 					Part::Word("If we do not"),
 					Part::Newline,
-					Part::Word("obey their"),
-					Part::Newline,
-					Part::Word("decrees, the"),
+					Part::Word("obey, the"),
 					Part::Newline,
 					Part::Word("Roman Emperor"),
 					Part::Newline,

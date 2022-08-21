@@ -455,6 +455,13 @@ impl Level
 			}
 			self.ticks_in_4sec = 0;
 		}
+		else if self.tutorial == Some(Tutorial::Tribute)
+			&& active_card == Some(Card::Roman)
+		{
+			self.tutorial = Some(Tutorial::PlaceRomans);
+			self.state = State::NewObjectives;
+			self.ticks_in_4sec = 0;
+		}
 		else if active_card.is_none()
 		{
 			match self.state
@@ -829,9 +836,17 @@ impl Level
 			{
 				State::NewObjectives =>
 				{
-					self.num_decrees = 0;
-					self.state = State::Shuffling;
-					self.ticks_in_4sec = 0;
+					if self.tutorial == Some(Tutorial::PlaceRomans)
+					{
+						self.tutorial = Some(Tutorial::PlaceRomans2);
+						self.state = State::Placement;
+					}
+					else
+					{
+						self.num_decrees = 0;
+						self.state = State::Shuffling;
+						self.ticks_in_4sec = 0;
+					}
 				}
 				State::Placement =>
 				{

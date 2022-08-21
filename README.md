@@ -18,6 +18,12 @@ w4 run target/wasm32-unknown-unknown/release/cart.wasm
 
 For more info about setting up WASM-4, see the [quickstart guide](https://wasm4.org/docs/getting-started/setup?code-lang=rust#quickstart).
 
+## Controls
+
+Left mouse button.
+
+Keyboard only controls: arrow keys to move cursor, X to place banners, hold Z and press left/right to show hints.
+
 ## Credits
 
 A game by Sander in 't Veld.

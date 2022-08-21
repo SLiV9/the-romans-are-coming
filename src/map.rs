@@ -6,6 +6,7 @@
 
 use crate::wasm4::*;
 
+use crate::level::Cursor;
 use crate::level::Marker;
 use crate::level::TerrainType;
 use crate::level::MAX_NUM_REGIONS;
@@ -977,6 +978,7 @@ impl Map
 		attack_preview: Bitmap<MAX_NUM_REGIONS>,
 		support_preview: Bitmap<MAX_NUM_REGIONS>,
 		gather_preview: Bitmap<MAX_NUM_REGIONS>,
+		cursor: &Cursor,
 	)
 	{
 		let mut is_empty = [false; MAX_NUM_REGIONS];
@@ -1277,18 +1279,64 @@ impl Map
 				}
 			}
 		}
+
+		if !cursor.is_mouse_active
+		{
+			let r = cursor.row as usize;
+			let c = cursor.col as usize;
+			let cell = self.cells[r][c];
+			let (x, y) = match cell.contents
+			{
+				Contents::Region {
+					marker,
+					terrain_type,
+					..
+				} if marker != Some(Marker::FogOfWar)
+					&& terrain_type != TerrainType::Water =>
+				{
+					(cell.centroid_x as i32 + 2, cell.centroid_y as i32 + 2)
+				}
+				_ =>
+				{
+					let x = (cursor.col as i32) * (GRID_CELL_SIZE as i32)
+						+ (GRID_CELL_SIZE / 2) as i32;
+					let y = (cursor.row as i32) * (GRID_CELL_SIZE as i32)
+						+ (GRID_CELL_SIZE / 2) as i32;
+
+					(x, y)
+				}
+			};
+			unsafe { *DRAW_COLORS = 0x2310 };
+			sprites::draw_cursor(MAP_X + x + 1, MAP_Y + y + 1);
+		};
 	}
 
-	pub fn determine_hovered_region_id(&self) -> Option<i8>
+	pub fn determine_hovered_region_id(&self, cursor: &mut Cursor)
+		-> Option<i8>
 	{
-		let (mouse_x, mouse_y): (i16, i16) = unsafe { (*MOUSE_X, *MOUSE_Y) };
-		let x = (mouse_x as i32) - MAP_X;
-		let y = (mouse_y as i32) - MAP_Y;
-		let (r, c, distance) = self.closest_rc_to_xy(x, y);
-		if r == 0 || distance > 1000.0
+		let (x, y) = if cursor.is_mouse_active
 		{
-			return None;
+			let x = (cursor.mouse_x as i32) - MAP_X;
+			let y = (cursor.mouse_y as i32) - MAP_Y;
+			let (r, c, distance) = self.closest_rc_to_xy(x, y);
+			if r == 0 || distance > 1000.0
+			{
+				return None;
+			}
+			cursor.row = r as i8;
+			cursor.col = c as i8;
+			(x, y)
 		}
+		else
+		{
+			let x = (cursor.col as i32) * (GRID_CELL_SIZE as i32)
+				+ (GRID_CELL_SIZE / 2) as i32;
+			let y = (cursor.row as i32) * (GRID_CELL_SIZE as i32)
+				+ (GRID_CELL_SIZE / 2) as i32;
+			(x, y)
+		};
+		let r = cursor.row as usize;
+		let c = cursor.col as usize;
 		match self.cells[r][c].contents
 		{
 			Contents::Region { region_id, .. } => Some(region_id),

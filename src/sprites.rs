@@ -437,3 +437,33 @@ const CARD_SHEET: [u8; 30] = [
 	0x88, 0x80, 0x40, 0x40, 0x15, 0x00, 0x2a, 0x00, 0x80, 0x80, 0x15, 0x00,
 	0x00, 0x00, 0x19, 0x00, 0x00, 0x00,
 ];
+
+pub fn draw_cursor(x: i32, y: i32)
+{
+	let alt = 0;
+	let frame = (alt as u32) % CURSOR_FRAMES;
+	blit_sub(
+		&CURSOR_SHEET,
+		x,
+		y,
+		CURSOR_WIDTH,
+		CURSOR_HEIGHT,
+		frame * CURSOR_WIDTH,
+		0,
+		CURSOR_SHEET_WIDTH,
+		CURSOR_SHEET_FLAGS,
+	);
+}
+
+const CURSOR_WIDTH: u32 = 8;
+const CURSOR_HEIGHT: u32 = CURSOR_SHEET_HEIGHT;
+const CURSOR_FRAMES: u32 = CURSOR_SHEET_WIDTH / CURSOR_WIDTH;
+
+// cursor_sheet
+const CURSOR_SHEET_WIDTH: u32 = 8;
+const CURSOR_SHEET_HEIGHT: u32 = 8;
+const CURSOR_SHEET_FLAGS: u32 = 1; // BLIT_2BPP
+const CURSOR_SHEET: [u8; 16] = [
+	0x55, 0x00, 0x69, 0x40, 0x6e, 0x50, 0x6f, 0x94, 0x6f, 0xa4, 0x6a, 0x54,
+	0x65, 0x40, 0x54, 0x00,
+];

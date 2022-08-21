@@ -80,9 +80,9 @@ Audio:
 
 Usability:
   ✔ Loading screen @done (2022-08-20 18:15)
-    ☐ Extra fake loading screen
+    ✘ Extra fake loading screen @cancelled (2022-08-21 22:17)
       Show map based on occupation noise during 30 ticks of during State::Setup
-  ☐ Keyboard controls
+  ✔ Keyboard controls @done (2022-08-21 22:17)
   ☐ Volume options 0/50%/100%
   ✘ High contrast mode (in particular the two shades of paper) @cancelled (2022-08-20 10:13)
     ✘ Adjustable palette? @cancelled (2022-08-18 17:54)

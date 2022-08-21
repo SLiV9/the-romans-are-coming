@@ -11,6 +11,7 @@ use crate::decree::Tutorial;
 use crate::decree::{AllOrNone, InOrNear};
 use crate::global_state::Wrapper;
 use crate::map::Map;
+use crate::map::GRID_SIZE;
 use crate::palette;
 use crate::sprites;
 
@@ -148,6 +149,7 @@ pub struct Level
 	state: State,
 	tutorial: Option<Tutorial>,
 	hover_preview: Option<Preview>,
+	cursor: Cursor,
 	rng: fastrand::Rng,
 }
 
@@ -399,6 +401,15 @@ impl Level
 			hover_preview: None,
 			state: State::Setup,
 			tutorial,
+			cursor: Cursor {
+				mouse_x: -1,
+				mouse_y: -1,
+				row: 8,
+				col: 8,
+				is_mouse_active: false,
+				is_resource_bar_active: false,
+				resource_bar_offset: 0,
+			},
 			rng,
 		}
 	}
@@ -419,7 +430,7 @@ impl Level
 			None
 		};
 
-		if unsafe { *GAMEPAD1 } & BUTTON_2 != 0
+		if gamepad & BUTTON_2 != 0 && false
 		{
 			self.threat_level = MAX_THREAT_LEVEL;
 			self.num_decrees = 0;
@@ -431,7 +442,9 @@ impl Level
 		self.attack_preview = Bitmap::new();
 		self.support_preview = Bitmap::new();
 		self.gather_preview = Bitmap::new();
-		let hovered_region_id = map.determine_hovered_region_id();
+		self.cursor.update(gamepad, self.previous_gamepad);
+		let hovered_region_id =
+			map.determine_hovered_region_id(&mut self.cursor);
 		if self.num_decrees == 0
 		{
 			self.num_cards = 0;
@@ -741,6 +754,27 @@ impl Level
 				}
 			}
 		}
+		else if self.cursor.is_resource_bar_active
+		{
+			let preview = match self.cursor.resource_bar_offset
+			{
+				0 => Preview::HoverObjectives,
+				1 => Preview::HoverResource {
+					terrain_type: TerrainType::Grass,
+				},
+				2 => Preview::HoverResource {
+					terrain_type: TerrainType::Forest,
+				},
+				3 => Preview::HoverResource {
+					terrain_type: TerrainType::Mountain,
+				},
+				4 => Preview::HoverResource {
+					terrain_type: TerrainType::Hill,
+				},
+				5.. => Preview::HoverDecrees,
+			};
+			self.hover_preview = Some(preview);
+		}
 		else if let Some(region_id) = hovered_region_id
 		{
 			let region = self.region_data[region_id as usize];
@@ -785,12 +819,11 @@ impl Level
 				self.hover_preview = preview;
 			}
 		}
-		else
+		else if self.cursor.is_mouse_active
 		{
-			let (mouse_x, mouse_y): (i16, i16) =
-				unsafe { (*MOUSE_X, *MOUSE_Y) };
-			if mouse_y < 9
+			if self.cursor.mouse_y < 9
 			{
+				let mouse_x = self.cursor.mouse_x as i32;
 				for (t, x) in [
 					(TerrainType::Grass, UI_X_GRAIN),
 					(TerrainType::Forest, UI_X_WOOD),
@@ -798,7 +831,7 @@ impl Level
 					(TerrainType::Mountain, UI_X_GOLD),
 				]
 				{
-					if mouse_x as i32 >= x - 3 && mouse_x as i32 <= x + 28
+					if mouse_x >= x - 3 && mouse_x <= x + 28
 					{
 						self.hover_preview =
 							Some(Preview::HoverResource { terrain_type: t });
@@ -808,7 +841,7 @@ impl Level
 				{
 					self.hover_preview = Some(Preview::HoverObjectives);
 				}
-				else if mouse_x >= (SCREEN_SIZE as i16) - 24
+				else if mouse_x >= (SCREEN_SIZE as i32) - 24
 				{
 					self.hover_preview = Some(Preview::HoverDecrees);
 				}
@@ -1421,6 +1454,7 @@ impl Level
 				self.attack_preview,
 				self.support_preview,
 				self.gather_preview,
+				&self.cursor,
 			);
 		}
 
@@ -1793,4 +1827,86 @@ fn draw_decimal_value<const N: usize>(value: u16, x: i32, y: i32)
 	}
 	let txt = unsafe { std::str::from_utf8_unchecked(&buffer) };
 	text(txt, x, y);
+}
+
+pub struct Cursor
+{
+	pub mouse_x: i16,
+	pub mouse_y: i16,
+	pub row: i8,
+	pub col: i8,
+	pub is_mouse_active: bool,
+	pub is_resource_bar_active: bool,
+	resource_bar_offset: u8,
+}
+
+impl Cursor
+{
+	fn update(&mut self, gamepad: u8, previous_gamepad: u8)
+	{
+		let (mouse_x, mouse_y): (i16, i16) = unsafe { (*MOUSE_X, *MOUSE_Y) };
+		if mouse_x != self.mouse_x || mouse_y != self.mouse_y
+		{
+			self.is_mouse_active = true;
+			self.is_resource_bar_active = false;
+			self.mouse_x = mouse_x;
+			self.mouse_y = mouse_y;
+		}
+		else if gamepad & BUTTON_2 != 0
+		{
+			self.is_mouse_active = false;
+			self.is_resource_bar_active = true;
+			if self.resource_bar_offset > 0
+				&& (gamepad & BUTTON_LEFT != 0)
+				&& (previous_gamepad & BUTTON_LEFT == 0)
+			{
+				self.resource_bar_offset -= 1;
+			}
+			else if self.resource_bar_offset < 5
+				&& (gamepad & BUTTON_RIGHT != 0)
+				&& (previous_gamepad & BUTTON_RIGHT == 0)
+			{
+				self.resource_bar_offset += 1;
+			}
+		}
+		else
+		{
+			self.is_resource_bar_active = false;
+			let arrow_mask =
+				BUTTON_UP | BUTTON_DOWN | BUTTON_LEFT | BUTTON_RIGHT;
+			if (gamepad & arrow_mask != 0)
+				&& (previous_gamepad & arrow_mask == 0)
+			{
+				self.is_mouse_active = false;
+				if gamepad & BUTTON_UP != 0
+				{
+					if self.row > 1
+					{
+						self.row -= 1;
+					}
+				}
+				else if gamepad & BUTTON_DOWN != 0
+				{
+					if self.row + 2 < GRID_SIZE as i8
+					{
+						self.row += 1;
+					}
+				}
+				else if gamepad & BUTTON_LEFT != 0
+				{
+					if self.col > 1
+					{
+						self.col -= 1;
+					}
+				}
+				else
+				{
+					if self.col + 2 < GRID_SIZE as i8
+					{
+						self.col += 1;
+					}
+				};
+			}
+		}
+	}
 }

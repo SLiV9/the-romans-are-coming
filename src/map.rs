@@ -1279,9 +1279,12 @@ impl Map
 		}
 	}
 
-	pub fn determine_hovered_region_id(&self) -> Option<i8>
+	pub fn determine_hovered_region_id(
+		&self,
+		mouse_x: i32,
+		mouse_y: i32,
+	) -> Option<i8>
 	{
-		let (mouse_x, mouse_y): (i16, i16) = unsafe { (*MOUSE_X, *MOUSE_Y) };
 		let x = (mouse_x as i32) - MAP_X;
 		let y = (mouse_y as i32) - MAP_Y;
 		let (r, c, distance) = self.closest_rc_to_xy(x, y);

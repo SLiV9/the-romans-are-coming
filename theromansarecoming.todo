@@ -39,8 +39,9 @@ Content:
   ✔ Tutorial / difficulty curve @done (2022-08-21 00:44)
   ✔ Transition occupation smoothly (replace is_occupied with percentage) @done (2022-08-19 13:18)
   ☐ Or curate a selection of level seeds
+      45
     ☐ Debug display with adjacency graph and types
-    ☐ In particular have a "campaign" of curated maps
+    ✔ In particular have a "campaign" of curated maps @done (2022-08-21 02:03)
   ☐ Freeplay
     ☐ Occupy adjacent culled cells
     ☐ Detect and solve issues with culled regions forming borders
@@ -88,7 +89,8 @@ Usability:
   ☐ Save high score per campaign level and show total
 
 Polish:
-  ☐ Itch.io page
-    ☐ Preview image with a single worker surrounded by roman occupation
+  ✔ Itch.io page @done (2022-08-21 02:55)
+    ✔ Preview image with a single worker surrounded by roman occupation @done (2022-08-21 02:10)
     ✔ Credits @done (2022-08-20 10:58)
   ☐ Publish to WAPM
+  ☐ Cargo.toml

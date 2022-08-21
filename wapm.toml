@@ -14,4 +14,4 @@ interfaces = { wasm4 = "0.0.1" }
 [[command]]
 runner = "wasm4@0.0.1"
 name = "play"
-module = "game"
+module = "the-romans-are-coming"

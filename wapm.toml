@@ -1,13 +1,13 @@
 [package]
-name = "SLiV9/my-game"
+name = "SLiV9/the-romans-are-coming"
 version = "1.0.0"
 description = "A strategy game where you place troops, gather resources and follow imperial decrees."
 readme = "README.md"
 repository = "https://github.com/SLiV9/the-romans-are-coming"
 
 [[module]]
-name = "game"
-source = "game.wasm"
+name = "the-romans-are-coming"
+source = "the-romans-are-coming.wasm"
 abi = "wasm4"
 interfaces = { wasm4 = "0.0.1" }
 

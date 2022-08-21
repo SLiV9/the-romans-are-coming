@@ -1,6 +1,6 @@
 [package]
 name = "cart"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["Sander in 't Veld <sanderintveld@hotmail.com>"]
 license = "MIT"

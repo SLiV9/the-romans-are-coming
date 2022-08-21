@@ -287,7 +287,7 @@ impl Level
 				terrain_type: TerrainType::Mountain,
 			},
 		];
-		trace(format!("seed = {}", seed));
+		//trace(format!("seed = {}", seed));
 		let mut num_regions = 0;
 		let mut region_data = [EMPTY_REGION; MAX_NUM_REGIONS];
 		let mut adjacency = [Bitmap::default(); MAX_NUM_REGIONS];
@@ -1227,7 +1227,6 @@ impl Level
 			}
 			_ => return,
 		};
-		trace(format!("clicked region {}", region_id));
 		self.region_data[region_id as usize].marker = Some(marker);
 		map.set_marker_in_region(region_id, Some(marker));
 		for i in self.kill_preview.into_iter()

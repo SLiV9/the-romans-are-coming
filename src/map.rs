@@ -61,6 +61,7 @@ const MAP_Y: i32 = 7;
 pub struct Map
 {
 	water_bitmap: [u8; BITMAP_SIZE],
+	mountain_bitmap: [u8; BITMAP_SIZE],
 	surface_bitmap: [u8; BITMAP_SIZE],
 	ink_bitmap: [u8; BITMAP_SIZE],
 	occupation_bitmap: [u8; BITMAP_SIZE],
@@ -77,6 +78,7 @@ impl Map
 	{
 		Self {
 			water_bitmap: [0; BITMAP_SIZE],
+			mountain_bitmap: [0; BITMAP_SIZE],
 			surface_bitmap: [0; BITMAP_SIZE],
 			ink_bitmap: [0; BITMAP_SIZE],
 			occupation_bitmap: [0; BITMAP_SIZE],
@@ -176,6 +178,14 @@ impl Map
 				else
 				{
 					erase_on_bitmap(&mut self.water_bitmap, x, y);
+				}
+				if terrain_type == TerrainType::Mountain
+				{
+					draw_on_bitmap(&mut self.mountain_bitmap, x, y);
+				}
+				else
+				{
+					erase_on_bitmap(&mut self.mountain_bitmap, x, y);
 				}
 				let has_surface = match terrain_type
 				{
@@ -483,13 +493,9 @@ impl Map
 			for c in 0..GRID_SIZE
 			{
 				let cell = &mut self.cells[r][c];
-				let (region_id, terrain_type) = match cell.contents
+				let terrain_type = match cell.contents
 				{
-					Contents::Region {
-						region_id,
-						terrain_type,
-						..
-					} => (region_id, terrain_type),
+					Contents::Region { terrain_type, .. } => terrain_type,
 					_ => continue,
 				};
 				let (te, tf) = match terrain_type
@@ -513,60 +519,13 @@ impl Map
 				{
 					badness += 1000.0;
 				}
-				if badness < 2.0
-				{
-					continue;
-				}
-				let mut num_surfaces = 0;
-				let mut minx = x;
-				let mut miny = y;
-				let mut maxx = x;
-				let mut maxy = y;
-				for v in 0..PROP_GRID_SIZE
-				{
-					for u in 0..PROP_GRID_SIZE
-					{
-						if self.prop_region_vu_map[v][u] == region_id
-						{
-							num_surfaces += 1;
-							let xx = u * PROP_GRID_CELL_SIZE
-								+ PROP_GRID_CELL_SIZE / 2;
-							let yy = v
-								+ PROP_GRID_CELL_SIZE + PROP_GRID_CELL_SIZE
-								/ 2;
-							minx = std::cmp::min(minx, xx);
-							maxx = std::cmp::max(maxx, xx);
-							miny = std::cmp::min(miny, yy);
-							maxy = std::cmp::max(maxy, yy);
-						}
-					}
-				}
-				for i in 0..100
+				for _i in 0..100
 				{
 					if badness < 2.0
 					{
 						break;
 					}
-					let (x, y) = if i == 0
-						&& num_surfaces > 1 * MIN_NUM_SURFACES_PER_REGION
-					{
-						let x = (minx + maxx) / 2;
-						let y = (miny + maxy) / 2;
-						let u = x / PROP_GRID_CELL_SIZE;
-						let v = y / PROP_GRID_CELL_SIZE;
-						if self.prop_region_vu_map[v][u] == region_id
-						{
-							(x, y)
-						}
-						else
-						{
-							pick_random_centroid_xy_at_rc(r, c, rng)
-						}
-					}
-					else
-					{
-						pick_random_centroid_xy_at_rc(r, c, rng)
-					};
+					let (x, y) = pick_random_centroid_xy_at_rc(r, c, rng);
 					let e = elevation.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 					let f = forest.get_noise(x as f64 + 0.5, y as f64 + 0.5);
 					let mut b = (te - e).abs() + (tf - f).abs();
@@ -734,6 +693,7 @@ impl Map
 						false
 					}
 					else if is_on_bitmap(&self.water_bitmap, x, y)
+						|| is_on_bitmap(&self.mountain_bitmap, x, y)
 					{
 						false
 					}

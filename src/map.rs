@@ -61,7 +61,6 @@ const MAP_Y: i32 = 7;
 pub struct Map
 {
 	water_bitmap: [u8; BITMAP_SIZE],
-	mountain_bitmap: [u8; BITMAP_SIZE],
 	surface_bitmap: [u8; BITMAP_SIZE],
 	ink_bitmap: [u8; BITMAP_SIZE],
 	occupation_bitmap: [u8; BITMAP_SIZE],
@@ -78,7 +77,6 @@ impl Map
 	{
 		Self {
 			water_bitmap: [0; BITMAP_SIZE],
-			mountain_bitmap: [0; BITMAP_SIZE],
 			surface_bitmap: [0; BITMAP_SIZE],
 			ink_bitmap: [0; BITMAP_SIZE],
 			occupation_bitmap: [0; BITMAP_SIZE],
@@ -178,14 +176,6 @@ impl Map
 				else
 				{
 					erase_on_bitmap(&mut self.water_bitmap, x, y);
-				}
-				if terrain_type == TerrainType::Mountain
-				{
-					draw_on_bitmap(&mut self.mountain_bitmap, x, y);
-				}
-				else
-				{
-					erase_on_bitmap(&mut self.mountain_bitmap, x, y);
 				}
 				let has_surface = match terrain_type
 				{
@@ -693,7 +683,6 @@ impl Map
 						false
 					}
 					else if is_on_bitmap(&self.water_bitmap, x, y)
-						|| is_on_bitmap(&self.mountain_bitmap, x, y)
 					{
 						false
 					}

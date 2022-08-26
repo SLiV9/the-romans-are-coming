@@ -46,7 +46,7 @@ Content:
   ☐ Freeplay
     ✔ Occupy adjacent culled cells @done (2022-08-26 16:21)
     ✔ Detect and solve issues with culled regions forming borders @done (2022-08-26 16:22)
-    ☐ Move region centroids to center if huge but to edge if small, but on surface either way
+    ✘ Move region centroids to center if huge but to edge if small, but on surface either way @cancelled (2022-08-26 16:46)
       Keeping in mind the MIN_DISTANCE_BETWEEN_REGIONS
     ☐ Adjust starting wood and stone based on availability
     ☐ Adjust wine tribute based on availability
@@ -75,10 +75,10 @@ Sprites:
   ✔ Roman wreath on title screen? @done (2022-08-20 10:56)
 
 Audio:
-  ☐ Resource gathering
+  ✘ Resource gathering @cancelled (2022-08-26 16:47)
   ✘ Papers moving around @cancelled (2022-08-20 10:13)
-  ☐ Combat?
-  ☐ Light background music
+  ✘ Combat? @cancelled (2022-08-26 16:47)
+  ✘ Light background music @cancelled (2022-08-26 16:47)
 
 Usability:
   ✔ Loading screen @done (2022-08-20 18:15)
@@ -86,7 +86,7 @@ Usability:
       Show map based on occupation noise during 30 ticks of during State::Setup
   ✔ Keyboard controls @done (2022-08-21 22:17)
     ✔ Keyboard cursor does not appear on mobile @done (2022-08-26 15:36)
-  ☐ Volume options 0/50%/100%
+  ✘ Volume options 0/50%/100% @cancelled (2022-08-26 16:47)
   ✘ High contrast mode (in particular the two shades of paper) @cancelled (2022-08-20 10:13)
     ✘ Adjustable palette? @cancelled (2022-08-18 17:54)
   ☐ Save high score per campaign level and show total

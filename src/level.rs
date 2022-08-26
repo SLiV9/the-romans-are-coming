@@ -20,7 +20,6 @@ use fastrand;
 
 pub const MAX_NUM_REGIONS: usize = 35;
 pub const MAX_NUM_CARDS: usize = 20;
-pub const MAX_NUM_DECREES: usize = 6;
 pub const TOTAL_NUM_DECREES: usize = 23;
 
 const MAX_THREAT_LEVEL: u8 = 10;

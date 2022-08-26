@@ -430,7 +430,12 @@ impl Level
 			None
 		};
 
-		if gamepad & BUTTON_2 != 0 && false
+		if (gamepad & BUTTON_1 != 0)
+			&& (gamepad & BUTTON_2 != 0)
+			&& (gamepad & BUTTON_LEFT != 0)
+			&& (gamepad & BUTTON_RIGHT != 0)
+			&& (gamepad & BUTTON_UP != 0)
+			&& false
 		{
 			self.threat_level = MAX_THREAT_LEVEL;
 			self.num_decrees = 0;

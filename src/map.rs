@@ -615,7 +615,7 @@ impl Map
 			}
 		}
 		// Merge abandoned props on the edges of regions.
-		for _i in 0..5
+		for merge_depth in 0..10
 		{
 			let mut any = false;
 			for v in 0..PROP_GRID_SIZE
@@ -648,17 +648,26 @@ impl Map
 						{
 							continue;
 						}
-						if get_from_propmap(&self.surface_propmap, uu, vv)
-							== terrain_type
+						let t = get_from_propmap(&self.surface_propmap, uu, vv);
+						if t == terrain_type
 						{
 							self.prop_region_vu_map[v][u] =
 								self.prop_region_vu_map[vv][uu];
 							any = true;
 						}
+						else if merge_depth >= 3
+							&& (terrain_type == Some(TerrainType::Grass)
+								|| terrain_type == Some(TerrainType::Hill))
+						{
+							self.prop_region_vu_map[v][u] =
+								self.prop_region_vu_map[vv][uu];
+							set_on_propmap(&mut self.surface_propmap, u, v, t);
+							any = true;
+						}
 					}
 				}
 			}
-			if !any
+			if !any && merge_depth >= 3
 			{
 				break;
 			}

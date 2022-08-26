@@ -248,7 +248,7 @@ impl Menu
 		if unsafe { *GAMEPAD1 } & BUTTON_2 != 0
 		{
 			unsafe { *DRAW_COLORS = 2 }
-			text("v1.0", 126, 150);
+			text("v1.1", 126, 150);
 		}
 	}
 }

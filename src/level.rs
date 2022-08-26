@@ -853,10 +853,11 @@ impl Level
 			self.hover_preview = Some(Preview::CannotPlaceRoman);
 		}
 
-		if (mousebuttons & MOUSE_LEFT != 0)
-			&& (self.previous_mousebuttons & MOUSE_LEFT == 0)
-			|| (gamepad & BUTTON_1 != 0)
-				&& (self.previous_gamepad & BUTTON_1 == 0)
+		if (self.cursor.is_mouse_active
+			&& (mousebuttons & MOUSE_LEFT != 0)
+			&& (self.previous_mousebuttons & MOUSE_LEFT == 0))
+			|| ((gamepad & BUTTON_1 != 0)
+				&& (self.previous_gamepad & BUTTON_1 == 0))
 		{
 			match self.state
 			{
@@ -1845,7 +1846,11 @@ impl Cursor
 	fn update(&mut self, gamepad: u8, previous_gamepad: u8)
 	{
 		let (mouse_x, mouse_y): (i16, i16) = unsafe { (*MOUSE_X, *MOUSE_Y) };
-		if mouse_x != self.mouse_x || mouse_y != self.mouse_y
+		if (mouse_x != self.mouse_x || mouse_y != self.mouse_y)
+			&& mouse_x >= 0
+			&& mouse_y >= 0
+			&& mouse_x < SCREEN_SIZE as i16
+			&& mouse_y < SCREEN_SIZE as i16
 		{
 			self.is_mouse_active = true;
 			self.is_resource_bar_active = false;

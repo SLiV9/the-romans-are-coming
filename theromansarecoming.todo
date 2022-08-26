@@ -83,6 +83,7 @@ Usability:
     ✘ Extra fake loading screen @cancelled (2022-08-21 22:17)
       Show map based on occupation noise during 30 ticks of during State::Setup
   ✔ Keyboard controls @done (2022-08-21 22:17)
+    ✔ Keyboard cursor does not appear on mobile @done (2022-08-26 15:36)
   ☐ Volume options 0/50%/100%
   ✘ High contrast mode (in particular the two shades of paper) @cancelled (2022-08-20 10:13)
     ✘ Adjustable palette? @cancelled (2022-08-18 17:54)
@@ -92,5 +93,5 @@ Polish:
   ✔ Itch.io page @done (2022-08-21 02:55)
     ✔ Preview image with a single worker surrounded by roman occupation @done (2022-08-21 02:10)
     ✔ Credits @done (2022-08-20 10:58)
-  ☐ Publish to WAPM
-  ☐ Cargo.toml
+  ✔ Publish to WAPM @done (2022-08-21 23:43)
+  ✔ Cargo.toml @done (2022-08-21 23:43)
